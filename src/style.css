@@ -1,0 +1,99 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #fafafa;
+  color: #222;
+}
+
+#app {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 24px;
+}
+
+#game canvas {
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+#ui {
+  min-width: 220px;
+}
+
+#ui h1 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  color: #2e7d32;
+}
+
+#dice-canvas {
+  width: 100%;
+  display: block;
+  margin: 0 0 16px;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+#roll-btn {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  background: #2e7d32;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#roll-btn:disabled {
+  background: #9e9e9e;
+  cursor: not-allowed;
+}
+
+#roll-btn:not(:disabled):hover {
+  background: #1b5e20;
+}
+
+.section-title {
+  margin: 20px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+  border-bottom: 2px solid #2e7d32;
+  padding-bottom: 4px;
+}
+
+.readout {
+  margin: 8px 0 0;
+}
+
+.readout div {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.readout dt {
+  color: #666;
+}
+
+.readout dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.passive-flash {
+  color: #2e7d32 !important;
+  font-weight: 700;
+}

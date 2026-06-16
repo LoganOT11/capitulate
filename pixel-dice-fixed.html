@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Dice</title>
+<style>
+  :root{ --bg:#1a2230; --bone:#e7d9c4; --gold:#ecc15a; --ink:#2a1d2e; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#10151f; color:var(--bone);
+    font-family:ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+    display:flex;align-items:center;justify-content:center;min-height:100%;padding:24px;
+  }
+  .stage{display:flex;flex-direction:column;align-items:center;gap:18px;width:100%;max-width:720px}
+  .eyebrow{letter-spacing:.42em;text-transform:uppercase;font-size:11px;color:var(--gold);opacity:.8;padding-left:.42em}
+  canvas{width:100%;display:block;image-rendering:pixelated;border-radius:4px;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+  .count{display:flex;gap:4px;background:rgba(0,0,0,.28);padding:4px;border-radius:5px}
+  .count button{font:inherit;font-size:12px;color:var(--bone);background:none;border:none;padding:7px 13px;border-radius:3px;cursor:pointer;opacity:.55}
+  .count button.on{background:rgba(236,193,90,.16);color:var(--gold);opacity:1}
+  .roll{font:inherit;letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--ink);
+    background:linear-gradient(180deg,#f0cf76,#d99a3d);border:none;border-bottom:3px solid #8a5f24;
+    border-radius:3px;padding:13px 32px;cursor:pointer;transition:transform .04s, filter .12s}
+  .roll:hover{filter:brightness(1.06)}
+  .roll:active{transform:translateY(2px);border-bottom-width:1px}
+  .roll:disabled{filter:saturate(.4) brightness(.85);cursor:default;transform:none}
+  .roll:focus-visible,.count button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .readout{font-size:13px;letter-spacing:.08em;opacity:.8;min-height:1.2em;text-align:center}
+  .readout b{color:var(--gold)}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="eyebrow">roll</div>
+    <canvas id="screen" width="720" height="540"></canvas>
+    <div class="readout" id="readout">Roll to begin</div>
+    <div class="controls">
+      <div class="count" id="count">
+        <button data-n="1" class="on">1</button>
+        <button data-n="3">3</button>
+        <button data-n="6">6</button>
+        <button data-n="20">20</button>
+      </div>
+      <button class="roll" id="rollBtn">Roll</button>
+    </div>
+  </div>
+
+<script>
+/* ===========================================================
+ *  Pixel-art dice.
+ *  - rests showing ONE flat face (camera flat at the ends).
+ *  - one fixed tilted axis -> smooth single-direction tumble.
+ *  - asymmetric speed curve: slow start, accelerate to a peak
+ *    ~40% in (where the hidden swap fires), then a LONG
+ *    decelerating tail that winds slowly to rest on the face.
+ * =========================================================== */
+
+const screen = document.getElementById('screen');
+const ctx = screen.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const PIXEL = 4;
+const BW = screen.width/PIXEL, BH = screen.height/PIXEL;     // 180 x 135
+const buf = document.createElement('canvas'); buf.width=BW; buf.height=BH;
+const b = buf.getContext('2d');
+
+const FOCAL = 7;
+let TURNS = 10, DURATION = 3800;
+const PEAK = 0.40;            // when speed peaks  (= swap point)
+const TAIL = 3;               // higher = longer, slower wind-down
+const TILT = 0.62;
+
+// fixed spin axis, tilted off every face so all faces tumble
+const AXIS = (()=>{const v=[0.78,0.62,0.24],m=Math.hypot(...v);return v.map(c=>c/m);})();
+
+// --- geometry ----------------------------------------------
+const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+const FACES=[
+  {v:[0,1,2,3],num:1,n:[0,0,-1]},{v:[4,5,6,7],num:6,n:[0,0,1]},
+  {v:[1,5,6,2],num:2,n:[1,0,0]},{v:[0,4,7,3],num:5,n:[-1,0,0]},
+  {v:[0,1,5,4],num:3,n:[0,-1,0]},{v:[3,2,6,7],num:4,n:[0,1,0]},
+];
+const TARGET={1:[0,0,0],6:[0,Math.PI,0],2:[0,Math.PI/2,0],5:[0,-Math.PI/2,0],3:[Math.PI/2,0,0],4:[-Math.PI/2,0,0]};
+const PIPS={1:[[0,0]],2:[[-.5,-.5],[.5,.5]],3:[[-.5,-.5],[0,0],[.5,.5]],
+  4:[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]],
+  5:[[-.5,-.5],[.5,-.5],[0,0],[-.5,.5],[.5,.5]],
+  6:[[-.5,-.6],[-.5,0],[-.5,.6],[.5,-.6],[.5,0],[.5,.6]]};
+
+// --- math --------------------------------------------------
+function rot([x,y,z],rx,ry,rz){
+  let c=Math.cos(rx),s=Math.sin(rx); let y1=y*c-z*s, z1=y*s+z*c;
+  c=Math.cos(ry);s=Math.sin(ry); let x2=x*c+z1*s, z2=-x*s+z1*c;
+  c=Math.cos(rz);s=Math.sin(rz); return [x2*c-y1*s, x2*s+y1*c, z2];
+}
+function spin([x,y,z],a){
+  const c=Math.cos(a),s=Math.sin(a),k=AXIS;
+  const d=k[0]*x+k[1]*y+k[2]*z, w=1-c;
+  return [ x*c+(k[1]*z-k[2]*y)*s+k[0]*d*w,
+           y*c+(k[2]*x-k[0]*z)*s+k[1]*d*w,
+           z*c+(k[0]*y-k[1]*x)*s+k[2]*d*w ];
+}
+function xf(v,m,phi,vrx,vry){ return rot(spin(rot(v,m[0],m[1],m[2]),phi),vrx,vry,0); }
+
+// accelerate to a peak at PEAK, then a long (1-x)^TAIL wind-down.
+// velocity is continuous at the peak, so no kink. Returns 0..1.
+const DNORM = PEAK/2 + (1-PEAK)/(TAIL+1);
+function rollEase(t){
+  if(t<PEAK) return (t*t/(2*PEAK))/DNORM;
+  const u=(t-PEAK)/(1-PEAK);
+  return (PEAK/2 + (1-PEAK)*(1-Math.pow(1-u,TAIL+1))/(TAIL+1))/DNORM;
+}
+// angular speed of the roll, normalised to 1 at the peak and 0 at both ends.
+// Zero-velocity at t=1 so the lean stops moving exactly when the spin does.
+function rollSpeed(t){
+  if(t<PEAK) return t/PEAK;
+  const u=(t-PEAK)/(1-PEAK);
+  return Math.pow(1-u,TAIL);
+}
+
+const LN=(()=>{const v=[-0.42,-0.82,-0.48],m=Math.hypot(...v);return v.map(c=>c/m);})();
+const STOPS=[[0,[84,36,82]],[0.2,[122,46,92]],[0.4,[166,62,74]],[0.6,[200,94,58]],[0.8,[224,144,62]],[1,[238,198,96]]];
+function ramp(t){
+  t=Math.max(0,Math.min(1,t)); const bands=6; t=Math.round(t*(bands-1))/(bands-1);
+  for(let i=0;i<STOPS.length-1;i++){ if(t<=STOPS[i+1][0]){
+    const a=STOPS[i],c=STOPS[i+1],f=(t-a[0])/((c[0]-a[0])||1);
+    return [a[1][0]+(c[1][0]-a[1][0])*f,a[1][1]+(c[1][1]-a[1][1])*f,a[1][2]+(c[1][2]-a[1][2])*f]; }}
+  return STOPS[STOPS.length-1][1];
+}
+const rgb=c=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+
+// --- state & layout ----------------------------------------
+let dice=[], count=1, cells=[], SCALE=22;
+let rolling=false, t0=0, prog=0;
+
+function layout(){
+  const perRow=count<=3?count:(count<=6?3:5);
+  const rows=Math.ceil(count/perRow);
+  const cellW=BW/perRow, cellH=Math.min(cellW,BH/rows);
+  SCALE=cellW*0.13;
+  const gridH=rows*cellH, top=(BH-gridH)/2; cells=[];
+  for(let i=0;i<count;i++){
+    const r=Math.floor(i/perRow), inRow=Math.min(perRow,count-r*perRow);
+    const off=(BW-inRow*cellW)/2, cc=i-r*perRow;
+    cells.push({cx:off+(cc+0.5)*cellW, cy:top+(r+0.5)*cellH});
+  }
+}
+function setCount(n){
+  count=n; dice=Array.from({length:n},()=>{const r=1+Math.floor(Math.random()*6);return {result:r,prev:r};});
+  document.querySelectorAll('#count button').forEach(x=>x.classList.toggle('on',+x.dataset.n===n));
+  layout();
+}
+function rollAll(){
+  if(rolling) return;
+  dice.forEach(d=>{d.prev=d.result; d.result=1+Math.floor(Math.random()*6);});
+  rolling=true; t0=performance.now();
+  document.getElementById('rollBtn').disabled=true;
+  document.getElementById('readout').textContent='Rolling…';
+}
+
+function drawBg(){
+  b.fillStyle='#1a2230'; b.fillRect(0,0,BW,BH);
+  b.strokeStyle='rgba(255,255,255,0.035)'; b.lineWidth=1; const D=13;
+  for(let c=-BH;c<BW+BH;c+=D){
+    b.beginPath(); b.moveTo(c,0); b.lineTo(c+BH,BH); b.stroke();
+    b.beginPath(); b.moveTo(c,0); b.lineTo(c-BH,BH); b.stroke();
+  }
+}
+
+function drawDie(cell, die){
+  let env=0, phi=0, mount=TARGET[die.result];
+  if(rolling){
+    env = rollSpeed(prog);   // lean tracks spin speed -> unwinds to rest, no end drift
+    phi = rollEase(prog)*TURNS*2*Math.PI;
+    mount = TARGET[ prog<PEAK ? die.prev : die.result ];   // swap at peak speed
+  }
+  const vrx=-TILT*env, vry=TILT*env;
+
+  const {cx,cy}=cell;
+  const project=p=>{const k=FOCAL/(FOCAL+p[2]); return [cx+p[0]*SCALE*k, cy+p[1]*SCALE*k, p[2], k];};
+  const P=V.map(v=>project(xf(v,mount,phi,vrx,vry)));
+
+  const vis=[];
+  for(const f of FACES){
+    const rn=xf(f.n,mount,phi,vrx,vry);
+    if(rn[2]>=-0.015) continue;
+    const pts=f.v.map(i=>P[i]);
+    vis.push({f,pts,rn,z:pts.reduce((s,p)=>s+p[2],0)/4});
+  }
+  vis.sort((a,c)=>c.z-a.z);
+
+  for(const d of vis){
+    const lit=0.18+0.82*Math.max(0,-(d.rn[0]*LN[0]+d.rn[1]*LN[1]+d.rn[2]*LN[2]));
+    let minY=1e9,maxY=-1e9; for(const p of d.pts){minY=Math.min(minY,p[1]);maxY=Math.max(maxY,p[1]);}
+    const g=b.createLinearGradient(0,minY,0,maxY);
+    g.addColorStop(0,rgb(ramp(lit+0.10))); g.addColorStop(1,rgb(ramp(lit-0.06)));
+    b.beginPath(); b.moveTo(d.pts[0][0],d.pts[0][1]);
+    for(let i=1;i<4;i++) b.lineTo(d.pts[i][0],d.pts[i][1]);
+    b.closePath(); b.fillStyle=g; b.fill();
+    b.lineJoin='round'; b.lineWidth=1; b.strokeStyle=rgb(ramp(lit-0.16)); b.stroke();
+
+    const c0=d.f.v.map(i=>V[i]);
+    const ctr=[(c0[0][0]+c0[2][0])/2,(c0[0][1]+c0[2][1])/2,(c0[0][2]+c0[2][2])/2];
+    const u=[(c0[1][0]-c0[0][0])/2,(c0[1][1]-c0[0][1])/2,(c0[1][2]-c0[0][2])/2];
+    const w=[(c0[3][0]-c0[0][0])/2,(c0[3][1]-c0[0][1])/2,(c0[3][2]-c0[0][2])/2];
+
+    // pip bars live IN the face plane (built from the face's own u/w axes), so
+    // they rotate, skew and foreshorten with the die instead of facing the camera.
+    const PL=0.13, PT=0.05;                 // bar half-length / half-thickness, face units
+    const uL=u.map(c=>c*PL), uT=u.map(c=>c*PT);
+    const wL=w.map(c=>c*PL), wT=w.map(c=>c*PT);
+    // pip colour tracks this face's own lighting instead of a flat ink
+    b.fillStyle = rgb([42,29,46].map(c=>Math.min(255,c*(0.5+0.9*lit))));
+    const quad=(P,da,db)=>{
+      const c=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([s1,s2])=>
+        project(xf([P[0]+da[0]*s1+db[0]*s2, P[1]+da[1]*s1+db[1]*s2, P[2]+da[2]*s1+db[2]*s2],mount,phi,vrx,vry)));
+      b.beginPath(); b.moveTo(c[0][0],c[0][1]);
+      for(let i=1;i<4;i++) b.lineTo(c[i][0],c[i][1]);
+      b.closePath(); b.fill();
+    };
+    for(const [pX,pY] of PIPS[d.f.num]){
+      const P=[ctr[0]+u[0]*pX*0.6+w[0]*pY*0.6, ctr[1]+u[1]*pX*0.6+w[1]*pY*0.6, ctr[2]+u[2]*pX*0.6+w[2]*pY*0.6];
+      quad(P,uL,wT);   // bar along u
+      quad(P,uT,wL);   // bar along w
+    }
+  }
+}
+
+function frame(now){
+  if(rolling){
+    prog=Math.min(1,(now-t0)/DURATION);
+    if(prog>=1){
+      rolling=false; prog=0;
+      document.getElementById('rollBtn').disabled=false;
+      const total=dice.reduce((s,d)=>s+d.result,0);
+      document.getElementById('readout').innerHTML = dice.length===1
+        ? 'You rolled <b>'+dice[0].result+'</b>'
+        : 'Rolled <b>'+dice.map(d=>d.result).join(' ')+'</b> · total <b>'+total+'</b>';
+    }
+  }
+  drawBg();
+  for(let i=0;i<dice.length;i++) drawDie(cells[i],dice[i]);
+  ctx.clearRect(0,0,screen.width,screen.height);
+  ctx.drawImage(buf,0,0,BW,BH,0,0,screen.width,screen.height);
+  requestAnimationFrame(frame);
+}
+
+document.getElementById('rollBtn').addEventListener('click',rollAll);
+document.getElementById('count').addEventListener('click',e=>{const n=e.target.dataset.n;if(n&&!rolling)setCount(+n);});
+setCount(1);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

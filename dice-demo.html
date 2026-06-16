@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Dice — optimized</title>
+<style>
+  :root{ --bg:#1a2230; --bone:#e7d9c4; --gold:#ecc15a; --ink:#2a1d2e; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#10151f; color:var(--bone);
+    font-family:ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+    display:flex;align-items:center;justify-content:center;min-height:100%;padding:24px;
+  }
+  .stage{display:flex;flex-direction:column;align-items:center;gap:18px;width:100%;max-width:720px}
+  .eyebrow{letter-spacing:.42em;text-transform:uppercase;font-size:11px;color:var(--gold);opacity:.8;padding-left:.42em}
+  canvas{width:100%;display:block;image-rendering:pixelated;border-radius:4px;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+  .count{display:flex;gap:4px;background:rgba(0,0,0,.28);padding:4px;border-radius:5px}
+  .count button{font:inherit;font-size:12px;color:var(--bone);background:none;border:none;padding:7px 13px;border-radius:3px;cursor:pointer;opacity:.55}
+  .count button.on{background:rgba(236,193,90,.16);color:var(--gold);opacity:1}
+  .roll{font:inherit;letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--ink);
+    background:linear-gradient(180deg,#f0cf76,#d99a3d);border:none;border-bottom:3px solid #8a5f24;
+    border-radius:3px;padding:13px 32px;cursor:pointer;transition:transform .04s, filter .12s}
+  .roll:hover{filter:brightness(1.06)}
+  .roll:active{transform:translateY(2px);border-bottom-width:1px}
+  .roll:disabled{filter:saturate(.4) brightness(.85);cursor:default;transform:none}
+  .readout{font-size:13px;letter-spacing:.08em;opacity:.8;min-height:1.2em;text-align:center}
+  .readout b{color:var(--gold)}
+  .stat{font-size:11px;letter-spacing:.06em;opacity:.55;text-align:center}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="eyebrow">roll</div>
+    <canvas id="screen" width="720" height="540"></canvas>
+    <div class="readout" id="readout">Roll to begin</div>
+    <div class="controls">
+      <div class="count" id="count">
+        <button data-n="1" class="on">1</button>
+        <button data-n="3">3</button>
+        <button data-n="6">6</button>
+        <button data-n="20">20</button>
+        <button data-n="50">50</button>
+        <button data-n="100">100</button>
+      </div>
+      <button class="roll" id="rollBtn">Roll</button>
+    </div>
+    <div class="stat" id="stat"></div>
+  </div>
+
+<script src="/src/pixel-dice.js"></script>
+<script>
+  var readout = document.getElementById('readout');
+  var rollBtn = document.getElementById('rollBtn');
+  var stat = document.getElementById('stat');
+
+  var roller = PixelDice({
+    canvas: document.getElementById('screen'),
+    count: 1,
+    duration: 3800,
+    onSettle: function (results) {
+      rollBtn.disabled = false;
+      var total = results.reduce(function (s, r) { return s + r; }, 0);
+      readout.innerHTML = results.length === 1
+        ? 'You rolled <b>' + results[0] + '</b>'
+        : 'Rolled <b>' + results.length + '</b> dice · total <b>' + total + '</b>';
+      showHeap();
+    }
+  });
+
+  function showHeap() {
+    if (performance && performance.memory) {
+      var mb = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+      stat.textContent = 'JS heap: ' + mb + ' MB';
+    }
+  }
+  showHeap();
+
+  rollBtn.addEventListener('click', function () {
+    if (roller.isRolling()) return;
+    rollBtn.disabled = true;
+    readout.textContent = 'Rolling…';
+    roller.roll();
+  });
+
+  document.getElementById('count').addEventListener('click', function (e) {
+    var n = e.target.dataset && e.target.dataset.n;
+    if (!n || roller.isRolling()) return;
+    document.querySelectorAll('#count button').forEach(function (x) {
+      x.classList.toggle('on', x.dataset.n === n);
+    });
+    roller.setCount(+n);
+    readout.textContent = n + (n === '1' ? ' die' : ' dice') + ' ready';
+    showHeap();
+  });
+
+  // Exposed for the RAM-measurement harness (scripts/measure-dice-ram.js).
+  window.__dice = roller;
+  window.__diceSetCount = function (n) { roller.setCount(n); };
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "capitulate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Phaser 4 Monopoly-style board game, tested with Playwright (Firefox).",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node scripts/run-tests.js",
+    "test:headed": "node scripts/run-tests.js --headed"
+  }
+}

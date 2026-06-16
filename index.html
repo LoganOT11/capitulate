@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Capitulate</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="game"></div>
+      <aside id="ui">
+        <h1>Capitulate</h1>
+        <canvas id="dice-canvas" width="480" height="240" aria-hidden="true"></canvas>
+        <button id="roll-btn" data-testid="roll-button" disabled>Roll Dice</button>
+        <h2 class="section-title">Dice</h2>
+        <dl class="readout">
+          <div><dt>Die 1</dt><dd data-testid="die-1">-</dd></div>
+          <div><dt>Die 2</dt><dd data-testid="die-2">-</dd></div>
+          <div><dt>Sum</dt><dd data-testid="sum">0</dd></div>
+          <div><dt>Position</dt><dd data-testid="position">0</dd></div>
+          <div><dt>Rolling</dt><dd data-testid="rolling">false</dd></div>
+        </dl>
+        <h2 class="section-title">Character</h2>
+        <dl class="readout">
+          <div><dt>Name</dt><dd data-testid="char-name">-</dd></div>
+          <div><dt>Type</dt><dd data-testid="char-type">-</dd></div>
+          <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
+          <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
+          <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
+          <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
+          <div><dt>Passive</dt><dd data-testid="char-passive">-</dd></div>
+        </dl>
+      </aside>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@4.1.0/dist/phaser.min.js"></script>
+    <script src="/src/engine/character.js"></script>
+    <script src="/src/engine/character-types.js"></script>
+    <script src="/src/pixel-dice.js"></script>
+    <script src="/src/main.js"></script>
+  </body>
+</html>
