@@ -8,35 +8,87 @@
   </head>
   <body>
     <div id="app">
-      <div id="game"></div>
+      <!-- Board scales to fit the viewport; overlay sits in the board's centre. -->
+      <div id="board-stage">
+        <div id="board">
+          <div id="game"></div>
+          <div id="center-overlay">
+            <canvas id="dice-canvas" width="320" height="160" aria-hidden="true"></canvas>
+            <button id="roll-btn" data-testid="roll-button" disabled>Roll Dice</button>
+            <div class="dice-status">
+              <span data-testid="die-1">-</span>
+              <span class="op">+</span>
+              <span data-testid="die-2">-</span>
+              <span class="op">=</span>
+              <span data-testid="sum">0</span>
+              <span class="sep">·</span>
+              <span class="muted">tile</span>
+              <span data-testid="position">0</span>
+              <span class="rolling-flag" data-testid="rolling">false</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <aside id="ui">
         <h1>Capitulate</h1>
-        <canvas id="dice-canvas" width="480" height="240" aria-hidden="true"></canvas>
-        <button id="roll-btn" data-testid="roll-button" disabled>Roll Dice</button>
-        <h2 class="section-title">Dice</h2>
-        <dl class="readout">
-          <div><dt>Die 1</dt><dd data-testid="die-1">-</dd></div>
-          <div><dt>Die 2</dt><dd data-testid="die-2">-</dd></div>
-          <div><dt>Sum</dt><dd data-testid="sum">0</dd></div>
-          <div><dt>Position</dt><dd data-testid="position">0</dd></div>
-          <div><dt>Rolling</dt><dd data-testid="rolling">false</dd></div>
-        </dl>
-        <h2 class="section-title">Character</h2>
-        <dl class="readout">
-          <div><dt>Name</dt><dd data-testid="char-name">-</dd></div>
-          <div><dt>Type</dt><dd data-testid="char-type">-</dd></div>
-          <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
-          <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
-          <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
-          <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
-          <div><dt>Passive</dt><dd data-testid="char-passive">-</dd></div>
-        </dl>
+
+        <!-- Character window: archetype, ability description, live stats -->
+        <section class="panel char-window">
+          <header class="panel-header">
+            <span class="char-name" data-testid="char-name">-</span>
+            <span class="char-type-badge" data-testid="char-type">-</span>
+          </header>
+          <p class="char-ability">
+            <strong data-testid="char-passive">-</strong>
+            <span class="ability-desc" id="ability-desc"></span>
+          </p>
+          <dl class="stat-grid">
+            <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
+            <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
+            <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
+            <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
+            <div><dt>Gold</dt><dd data-testid="char-gold">0</dd></div>
+          </dl>
+        </section>
+
+        <!-- Item inventory: 2×3 = 6 equip slots -->
+        <section class="panel">
+          <h2 class="section-title">Items</h2>
+          <div id="item-grid" class="item-grid"></div>
+        </section>
+
+        <!-- Dice inventory: resizable; dice shrink as more are added -->
+        <section class="panel dice-panel">
+          <h2 class="section-title">
+            Dice <span class="dice-count" id="dice-count"></span>
+          </h2>
+          <div id="dice-inventory" class="dice-inventory"></div>
+        </section>
+
+        <div id="shop-panel" class="shop-panel" style="display:none;">
+          <h2 class="section-title" data-testid="shop-title">Shop</h2>
+          <div data-testid="shop-inventory" class="shop-inventory"></div>
+          <div class="shop-actions">
+            <button id="shop-reroll-btn" data-testid="shop-reroll" class="btn-secondary">Reroll (Free)</button>
+            <button id="shop-close-btn" data-testid="shop-close" class="btn-secondary">Close</button>
+          </div>
+        </div>
       </aside>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/phaser@4.1.0/dist/phaser.min.js"></script>
+    <!-- engine core (order matters: dependencies first) -->
+    <script src="/src/engine/dice/die.js"></script>
+    <script src="/src/engine/dice/dice-pool.js"></script>
+    <script src="/src/engine/items/item.js"></script>
+    <script src="/src/engine/items/item-registry.js"></script>
     <script src="/src/engine/character.js"></script>
     <script src="/src/engine/character-types.js"></script>
+    <script src="/src/engine/game-state.js"></script>
+    <script src="/src/engine/battle/battle-engine.js"></script>
+    <script src="/src/engine/shop/shop-engine.js"></script>
+    <!-- game -->
     <script src="/src/pixel-dice.js"></script>
     <script src="/src/main.js"></script>
   </body>
