@@ -5,6 +5,7 @@
   "description": "A Phaser 4 Monopoly-style board game, tested with Playwright (Firefox).",
   "scripts": {
     "start": "node server.js",
+    "stop": "lsof -ti:8080 | xargs kill -9 2>/dev/null || echo 'No process on port 8080'",
     "test": "node scripts/run-tests.js",
     "test:headed": "node scripts/run-tests.js --headed"
   }

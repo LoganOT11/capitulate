@@ -1,17 +1,17 @@
-/* global Phaser, CHARACTER_TYPES, isTriggered, triggerCount */
+/* global Phaser, CHARACTER_TYPES, isTriggered, triggerCount, DicePool, ItemSlots */
 
 // --- Character ------------------------------------------------------------
 // Core entity that holds stats, loop progression, and (future) inventory.
 // All archetypes start with identical base stats; passives diverge them over time.
 
 const BASE_STATS = Object.freeze({
-  health: 100,
+  health: 200,
   damage: 10,
   speed: 5, // seconds — base cooldown between dice rolls
 });
 
 // Health multiplier applied each time the character completes a full board loop.
-// After loop N the character's max HP = 100 × 1.8^N.
+// After loop N the character's max HP = 200 × 1.8^N.
 const HEALTH_LOOP_MULTIPLIER = 1.8;
 
 class Character {
@@ -35,6 +35,7 @@ class Character {
     this.damage  = this.baseDamage;
     this.speed   = this.baseSpeed;
     this.loops   = 0;
+    this.gold    = 0;
 
     // --- passive-derived flags ---
     this.magicType = false; // true when mage passive has triggered at least once
@@ -47,6 +48,10 @@ class Character {
     // --- passive trigger log (for UI/test inspection) ---
     this.lastPassiveTriggered = false;
     this.lastPassiveEffects   = [];
+
+    // --- dice pool and item slots ---
+    this.dicePool  = new DicePool();
+    this.itemSlots = new ItemSlots(2, 3);
   }
 
   // --- HP management ------------------------------------------------------
@@ -146,7 +151,10 @@ class Character {
       damage:    this.damage,
       speed:     this.speed,
       loops:     this.loops,
+      gold:      this.gold,
       magicType: this.magicType,
+      dicePool:  this.dicePool.toJSON(),
+      itemSlots: this.itemSlots.toJSON(),
     };
   }
 

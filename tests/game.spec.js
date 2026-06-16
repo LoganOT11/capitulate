@@ -5,7 +5,11 @@ async function waitForGameReady(page) {
 }
 
 async function waitUntilStopped(page) {
-  await page.waitForFunction(() => window.__game && window.__game.getState().rolling === false);
+  // Wait until rolling finishes AND any shop/battle has closed (back to board state).
+  await page.waitForFunction(() => {
+    const state = window.__game && window.__game.getState();
+    return state && state.rolling === false && state.gameState === 'board';
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -49,8 +53,20 @@ test('clicking the roll button rolls valid dice and advances the token', async (
 
 test('the token wraps around the 40-tile board', async ({ page }) => {
   // 4 x 12 = 48 tiles of travel -> 48 % 40 = 8.
+  // Movement passes through corner tiles which open shops/battles.
+  // Close any shop that opens so movement can resume.
   for (let i = 0; i < 4; i++) {
     await page.evaluate(() => window.__game.rollWith(6, 6));
+    // Wait for a shop to potentially open (tween per tile = 140ms).
+    await page.waitForFunction(() => {
+      const s = window.__game.getState();
+      return s.gameState === 'shop' || (!s.rolling && s.gameState === 'board');
+    }, { timeout: 5000 });
+    await page.evaluate(() => {
+      if (window.__game.getState().gameState === 'shop') {
+        window.__game.closeShop();
+      }
+    });
     await waitUntilStopped(page);
   }
   const state = await page.evaluate(() => window.__game.getState());
