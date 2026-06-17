@@ -15,152 +15,21 @@ body {
   overflow: hidden; /* everything fits on one page — no page scroll */
 }
 
-/* --- App shell ---------------------------------------------------------- */
+/* --- App shell: left char | centre board+dice | right equip+roll -------- */
 
 #app {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   height: 100vh;
-  padding: 16px;
+  padding: 12px;
   align-items: stretch;
-}
-
-/* --- Board stage (scales to fit the viewport) --------------------------- */
-
-#board-stage {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-/* #board is held at the native board pixel size (set by main.js) and scaled
-   as a whole via transform, so the centre overlay stays pinned to the board. */
-#board {
-  position: relative;
-  flex: none;
-  transform-origin: center center;
-}
-
-#game {
-  position: absolute;
-  inset: 0;
-}
-
-#game canvas {
-  display: block;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-}
-
-/* --- Centre overlay: dice animation, roll button, status ---------------- */
-
-#center-overlay {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 340px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  pointer-events: none; /* board stays clickable; children opt back in */
-}
-
-#center-overlay > * {
-  pointer-events: auto;
-}
-
-#dice-canvas {
-  width: 100%;
-  display: block;
-  image-rendering: pixelated;
-  border-radius: 12px;
-  background: #1a2230;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
-}
-
-#roll-btn {
-  width: 100%;
-  padding: 14px 16px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
-  background: #2e7d32;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.35);
-}
-
-#roll-btn:disabled {
-  background: #9e9e9e;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-#roll-btn:not(:disabled):hover {
-  background: #1b5e20;
-}
-
-.dice-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #1b5e20;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-
-.dice-status .op {
-  color: #9e9e9e;
-}
-
-.dice-status .sep {
-  color: #cfd8dc;
-}
-
-.dice-status .muted {
-  color: #888;
-  font-weight: 500;
-}
-
-.dice-status .rolling-flag {
-  display: none; /* test-only readout */
-}
-
-/* --- Sidebar ------------------------------------------------------------ */
-
-#ui {
-  width: 300px;
-  flex: none;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
-}
-
-#ui h1 {
-  margin: 0;
-  font-size: 20px;
-  color: #2e7d32;
 }
 
 .panel {
   background: #fff;
   border: 1px solid #e6e6e6;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
@@ -173,16 +42,31 @@ body {
   color: #555;
 }
 
-/* --- Character window --------------------------------------------------- */
+/* --- Left: character panel --------------------------------------------- */
 
-.char-window .panel-header {
+#char-panel {
+  width: 250px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+#char-panel h1 {
+  margin: 0 0 14px;
+  font-size: 22px;
+  color: #2e7d32;
+}
+
+.char-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .char-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
 }
 
@@ -196,51 +80,50 @@ body {
 }
 
 .char-ability {
-  margin: 8px 0 10px;
+  margin: 0 0 14px;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eee;
 }
 
 .char-ability strong {
   display: block;
   color: #2e7d32;
-  margin-bottom: 2px;
-}
-
-.char-ability strong.passive-flash {
-  color: #1b5e20;
+  margin-bottom: 3px;
+  font-size: 13px;
 }
 
 .ability-desc {
   color: #666;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+.stat-list {
   margin: 0;
-}
-
-.stat-grid div {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 5px 7px;
+  gap: 6px;
+}
+
+.stat-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
   background: #f5f5f5;
   border-radius: 6px;
 }
 
-.stat-grid dt {
-  font-size: 9px;
+.stat-list dt {
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #999;
+  color: #888;
 }
 
-.stat-grid dd {
+.stat-list dd {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -249,64 +132,71 @@ body {
   color: #2e7d32 !important;
 }
 
-/* --- Item inventory (2×3 grid) ------------------------------------------ */
+/* --- Centre: board + dice storage beneath ------------------------------- */
 
-.item-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.item-slot {
-  height: 56px;
-  border-radius: 8px;
+#center-col {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+/* board-stage is sized to the board's displayed square (set by main.js);
+   the native-size board is scaled from the top-left to fill it exactly. */
+#board-stage {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+#board {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+}
+
+#game canvas {
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Dice roll animation, centred over the board (scales with it) */
+#board-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 4px;
-  text-align: center;
-  overflow: hidden;
+  pointer-events: none;
 }
 
-.item-slot.empty {
-  border: 2px dashed #d4d4d4;
-  color: #c4c4c4;
+#dice-canvas {
+  width: 44%;
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 12px;
+  background: #1a2230;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
 
-.item-slot.empty .item-empty {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.item-slot.filled {
-  border: 2px solid #2e7d32;
-  background: #e8f5e9;
-  color: #1b5e20;
-}
-
-.item-slot .item-pip {
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.item-slot .item-name {
-  font-size: 9px;
-  line-height: 1.1;
-  margin-top: 2px;
-  white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* --- Dice inventory (resizable; dice scale with box size + count) ------- */
-
-.dice-panel {
+/* Horizontal dice-storage panel — width matched to the board by main.js */
+#dice-panel {
+  flex: none;
+  height: 132px;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto; /* absorb leftover sidebar height so nothing clips */
-  min-height: 0;
+  min-width: 0;
 }
 
 .dice-count {
@@ -316,22 +206,21 @@ body {
 
 .dice-inventory {
   flex: 1 1 auto;
-  min-height: 70px;
-  resize: vertical;
+  min-height: 0;
   overflow: auto;
   display: grid;
-  grid-template-columns: repeat(var(--dice-cols, 2), var(--chip-size, 56px));
+  grid-template-columns: repeat(var(--dice-cols, 4), var(--chip-size, 56px));
   grid-auto-rows: var(--chip-size, 56px);
   gap: 6px;
   justify-content: center;
-  align-content: start;
-  padding: 8px;
+  align-content: center;
+  padding: 6px;
   background: #eceff1;
   border-radius: 8px;
 }
 
 .dice-inventory:empty::before {
-  content: "No dice yet";
+  content: "No dice stored yet";
   grid-column: 1 / -1;
   color: #aaa;
   font-size: 12px;
@@ -376,7 +265,7 @@ body {
 }
 
 .pip-face {
-  width: 58%;
+  width: 56%;
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -397,20 +286,203 @@ body {
   border-radius: 50%;
 }
 
-/* --- Shop panel --------------------------------------------------------- */
+/* --- Right: equipment (top) + roll area (bottom-right corner) ------------ */
+
+#right-col {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+#equip-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.item-slot {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.item-slot.empty {
+  border: 2px dashed #d4d4d4;
+  color: #c4c4c4;
+}
+
+.item-slot.empty .item-empty {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.item-slot.filled {
+  border: 2px solid #2e7d32;
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.item-slot .item-pip {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.item-slot .item-name {
+  font-size: 10px;
+  line-height: 1.1;
+  margin-top: 3px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#roll-area {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.dice-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #1b5e20;
+  background: #f1f8e9;
+  border-radius: 8px;
+}
+
+.dice-status .op {
+  color: #9e9e9e;
+}
+
+.dice-status .sep {
+  color: #cfd8dc;
+}
+
+.dice-status .muted {
+  color: #888;
+  font-weight: 500;
+}
+
+.dice-status .rolling-flag {
+  display: none; /* test-only readout */
+}
+
+#roll-btn {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #2e7d32;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.35);
+}
+
+#roll-btn:disabled {
+  background: #9e9e9e;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+#roll-btn:not(:disabled):hover {
+  background: #1b5e20;
+}
+
+/* --- Shop overlay (floats over the board; hide/view toggle) ------------- */
 
 .shop-panel {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
   padding: 12px;
   background: #fff;
   border: 2px solid #2e7d32;
   border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.shop-panel.collapsed {
+  width: auto;
+}
+
+.shop-panel.collapsed .shop-body {
+  display: none;
+}
+
+.shop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shop-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b5e20;
+}
+
+.btn-toggle {
+  flex: none;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: #2e7d32;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-toggle:hover {
+  background: #1b5e20;
+}
+
+.shop-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
 }
 
 .shop-inventory {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin: 8px 0;
+  margin: 10px 0;
 }
 
 .shop-slot {
@@ -452,7 +524,6 @@ body {
 .shop-actions {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
 }
 
 .btn-secondary {

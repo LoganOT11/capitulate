@@ -8,73 +8,80 @@
   </head>
   <body>
     <div id="app">
-      <!-- Board scales to fit the viewport; overlay sits in the board's centre. -->
-      <div id="board-stage">
-        <div id="board">
-          <div id="game"></div>
-          <div id="center-overlay">
+      <!-- LEFT: character information -->
+      <aside id="char-panel" class="panel">
+        <h1>Capitulate</h1>
+        <div class="char-header">
+          <span class="char-name" data-testid="char-name">-</span>
+          <span class="char-type-badge" data-testid="char-type">-</span>
+        </div>
+        <div class="char-ability">
+          <strong data-testid="char-passive">-</strong>
+          <span class="ability-desc" id="ability-desc"></span>
+        </div>
+        <dl class="stat-list">
+          <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
+          <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
+          <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
+          <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
+          <div><dt>Gold</dt><dd data-testid="char-gold">0</dd></div>
+        </dl>
+      </aside>
+
+      <!-- CENTRE: board on top, dice storage beneath (matched to board width) -->
+      <div id="center-col">
+        <div id="board-stage">
+          <div id="board"><div id="game"></div></div>
+
+          <!-- Dice roll animation, centred over the board -->
+          <div id="board-overlay">
             <canvas id="dice-canvas" width="320" height="160" aria-hidden="true"></canvas>
-            <button id="roll-btn" data-testid="roll-button" disabled>Roll Dice</button>
-            <div class="dice-status">
-              <span data-testid="die-1">-</span>
-              <span class="op">+</span>
-              <span data-testid="die-2">-</span>
-              <span class="op">=</span>
-              <span data-testid="sum">0</span>
-              <span class="sep">·</span>
-              <span class="muted">tile</span>
-              <span data-testid="position">0</span>
-              <span class="rolling-flag" data-testid="rolling">false</span>
+          </div>
+
+          <!-- Shop appears over the board with a hide/view toggle -->
+          <div id="shop-panel" class="shop-panel" style="display:none;">
+            <div class="shop-header">
+              <h2 class="shop-title" data-testid="shop-title">Shop</h2>
+              <button id="shop-toggle-btn" class="btn-toggle">Hide</button>
+            </div>
+            <div class="shop-body">
+              <div data-testid="shop-inventory" class="shop-inventory"></div>
+              <div class="shop-actions">
+                <button id="shop-reroll-btn" data-testid="shop-reroll" class="btn-secondary">Reroll (Free)</button>
+                <button id="shop-close-btn" data-testid="shop-close" class="btn-secondary">Close</button>
+              </div>
             </div>
           </div>
         </div>
+
+        <section id="dice-panel" class="panel">
+          <h2 class="section-title">Dice <span class="dice-count" id="dice-count"></span></h2>
+          <div id="dice-inventory" class="dice-inventory"></div>
+        </section>
       </div>
 
-      <aside id="ui">
-        <h1>Capitulate</h1>
-
-        <!-- Character window: archetype, ability description, live stats -->
-        <section class="panel char-window">
-          <header class="panel-header">
-            <span class="char-name" data-testid="char-name">-</span>
-            <span class="char-type-badge" data-testid="char-type">-</span>
-          </header>
-          <p class="char-ability">
-            <strong data-testid="char-passive">-</strong>
-            <span class="ability-desc" id="ability-desc"></span>
-          </p>
-          <dl class="stat-grid">
-            <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
-            <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
-            <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
-            <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
-            <div><dt>Gold</dt><dd data-testid="char-gold">0</dd></div>
-          </dl>
-        </section>
-
-        <!-- Item inventory: 2×3 = 6 equip slots -->
-        <section class="panel">
-          <h2 class="section-title">Items</h2>
+      <!-- RIGHT: equipment (top) + dice animation & roll button (bottom corner) -->
+      <div id="right-col">
+        <section id="equip-panel" class="panel">
+          <h2 class="section-title">Equipment</h2>
           <div id="item-grid" class="item-grid"></div>
         </section>
 
-        <!-- Dice inventory: resizable; dice shrink as more are added -->
-        <section class="panel dice-panel">
-          <h2 class="section-title">
-            Dice <span class="dice-count" id="dice-count"></span>
-          </h2>
-          <div id="dice-inventory" class="dice-inventory"></div>
-        </section>
-
-        <div id="shop-panel" class="shop-panel" style="display:none;">
-          <h2 class="section-title" data-testid="shop-title">Shop</h2>
-          <div data-testid="shop-inventory" class="shop-inventory"></div>
-          <div class="shop-actions">
-            <button id="shop-reroll-btn" data-testid="shop-reroll" class="btn-secondary">Reroll (Free)</button>
-            <button id="shop-close-btn" data-testid="shop-close" class="btn-secondary">Close</button>
+        <div id="roll-area">
+          <div class="dice-status">
+            <span data-testid="die-1">-</span>
+            <span class="op">+</span>
+            <span data-testid="die-2">-</span>
+            <span class="op">=</span>
+            <span data-testid="sum">0</span>
+            <span class="sep">·</span>
+            <span class="muted">tile</span>
+            <span data-testid="position">0</span>
+            <span class="rolling-flag" data-testid="rolling">false</span>
           </div>
+          <button id="roll-btn" data-testid="roll-button" disabled>Roll Dice</button>
         </div>
-      </aside>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/phaser@4.1.0/dist/phaser.min.js"></script>

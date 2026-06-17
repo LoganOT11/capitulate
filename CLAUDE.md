@@ -148,10 +148,13 @@ DOM readout via `data-testid`: `die-1`, `die-2`, `sum`, `position`, `rolling`, `
 
 ## Layout
 
-- **Single-page, no-scroll** — `#app` fills `100vh`; the Phaser board is held at native size in `#board` and CSS-`transform: scale()`-d to fit the viewport (`fitBoard()` on load + window resize).
-- **Centre overlay** — the dice animation `<canvas>`, roll button, and roll status are absolutely positioned in the board's centre (`#center-overlay`), scaling with the board.
-- **Sidebar** (`#ui`) — Character window (archetype + ability description + stat grid), 6-slot item grid, and a resizable dice inventory.
-- **Dice inventory** — flex-absorbs leftover sidebar height; each owned die renders as a pip-face chip. `layoutDiceInventory()` picks the column count + chip size that best fills the box for the current die count (driven by a `ResizeObserver`), so dice stay visible and shrink as more are added.
+A single-page, no-scroll layout (`#app` fills `100vh`) with the board centred and panels on the edges. `fitLayout()` (on load + window resize) makes the board a square that fits beside the side panels and matches the dice panel to the board's width.
+
+- **Left** (`#char-panel`) — full-height character window: name, archetype badge, ability name + description, and a vertical stat list.
+- **Centre** (`#center-col`) — the Phaser board (held at native size in `#board`, CSS-`transform: scale()`-d from the top-left to fill the JS-sized `#board-stage`), with the horizontal **dice-storage panel** (`#dice-panel`) directly beneath it, width-matched to the board.
+- **Right** (`#right-col`) — `#equip-panel` (6 equipment slots, `item-slot-{row}-{col}`) on top; `#roll-area` at the bottom-right corner holds the dice animation `<canvas>`, roll status, and the roll button.
+- **Dice inventory** — each owned die renders as a pip-face chip; `layoutDiceInventory()` picks the column count + chip size that best fills the panel for the current die count (driven by a `ResizeObserver`), so dice stay visible and shrink as more are added.
+- **Shop overlay** — `#shop-panel` floats over the board (inside `#board-stage`). `#shop-toggle-btn` toggles a `collapsed` class (Hide ⇄ View) that hides the shop body so the board behind it is visible.
 
 ## Coding Conventions
 

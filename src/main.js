@@ -54,15 +54,32 @@ function makePipFace(value) {
   return face;
 }
 
-/** Scale the fixed-size board so it fits the available stage area. */
-function fitBoard() {
+// Vertical gap between the board and the dice panel (matches CSS gap).
+const CENTER_GAP = 12;
+
+/**
+ * Lay out the centre column: make the board a square that fits beside the side
+ * panels, then size the dice-storage panel beneath it to the same width.
+ */
+function fitLayout() {
+  const col = document.getElementById('center-col');
   const stage = document.getElementById('board-stage');
   const board = document.getElementById('board');
-  if (!stage || !board) return;
+  const dicePanel = document.getElementById('dice-panel');
+  if (!col || !stage || !board) return;
+
   board.style.width = W + 'px';
   board.style.height = H + 'px';
-  const scale = Math.min(stage.clientWidth / W, stage.clientHeight / H);
-  board.style.transform = `scale(${scale > 0 ? scale : 1})`;
+
+  const diceH = dicePanel ? dicePanel.offsetHeight : 0;
+  const availW = col.clientWidth;
+  const availH = col.clientHeight - diceH - CENTER_GAP;
+  const size = Math.max(0, Math.min(availW, availH));
+
+  stage.style.width = size + 'px';
+  stage.style.height = size + 'px';
+  board.style.transform = `scale(${size / W})`;
+  if (dicePanel) dicePanel.style.width = size + 'px';
 }
 
 const CORNER_COLORS = {
@@ -116,10 +133,12 @@ class BoardScene extends Phaser.Scene {
       .addEventListener('click', () => this.handleReroll());
     document.getElementById('shop-close-btn')
       .addEventListener('click', () => this.closeShop());
+    document.getElementById('shop-toggle-btn')
+      .addEventListener('click', () => this.toggleShopVisibility());
 
-    // Scale the board to fit the viewport, and re-fit on window resize.
-    fitBoard();
-    window.addEventListener('resize', fitBoard);
+    // Size the board + dice panel to the viewport, and re-fit on resize.
+    fitLayout();
+    window.addEventListener('resize', fitLayout);
 
     // Re-size dice chips whenever the inventory box is resized by the user.
     const diceBox = document.getElementById('dice-inventory');
@@ -307,7 +326,22 @@ class BoardScene extends Phaser.Scene {
 
     document.getElementById('roll-btn').disabled = true;
     this.renderShop();
-    document.getElementById('shop-panel').style.display = 'block';
+
+    // Reveal the shop over the board, expanded, with a "Hide" toggle.
+    const panel = document.getElementById('shop-panel');
+    panel.classList.remove('collapsed');
+    const toggle = document.getElementById('shop-toggle-btn');
+    if (toggle) toggle.textContent = 'Hide';
+    panel.style.display = 'flex';
+  }
+
+  /** Collapse the shop to a small bar so the board behind it is visible. */
+  toggleShopVisibility() {
+    const panel = document.getElementById('shop-panel');
+    const toggle = document.getElementById('shop-toggle-btn');
+    if (!panel) return;
+    const collapsed = panel.classList.toggle('collapsed');
+    if (toggle) toggle.textContent = collapsed ? 'View' : 'Hide';
   }
 
   closeShop() {
