@@ -49,12 +49,14 @@ demos/                  # Standalone dice prototypes — NOT part of the game
   pixel-dice-roll.html   # Physics-tumble prototype (source of pixel-dice-physics.js)
 docs/
   DESIGN.md             # Three-tier equipment system design (dice → items → mods)
-  DICE_PERFORMANCE.md   # Dice RAM investigation & optimization notes
+  DICE_PERFORMANCE.md   # demos/pixel-dice.js RAM investigation & optimization notes
+  DICE_OPTIMIZATIONS.md # Board renderer (pixel-dice-physics) footprint + optimization roadmap
 tests/
   game.spec.js          # Playwright tests using window.__game API
 scripts/
   run-tests.js          # Test runner — resolves Playwright from global @playwright/cli
-  measure-dice-ram.js   # Dice RAM measurement harness (Chromium headless)
+  measure-dice-ram.js   # demos dice RAM measurement harness (Chromium headless)
+  measure-dice-fairness.js # Samples PixelDicePhysics outcomes at scale (fairness / chi-square)
 ```
 
 ## Architecture Notes
@@ -64,7 +66,8 @@ scripts/
 - **No local `npm install`** — Playwright resolves from the globally-installed `@playwright/cli` via `NODE_PATH` override in `scripts/run-tests.js`. Tests import `playwright/test` (not `@playwright/test`).
 - **Board geometry**: 40 tiles on an 11×11 grid. Tile 0 (GO) is bottom-right, movement is counter-clockwise.
 - **Dice renderers are decoupled** from Phaser (`src/render/`, canvas-based, attach to `window`): `PixelDicePhysics` (centre board `#dice-canvas`) tumbles two cubes whose settled top face is the roll result; `PixelDiceDeluxe` (`#dice-bar-canvas`) spins the owned-dice bar. Both stop their `requestAnimationFrame` loop when idle and draw a single rest frame.
-- **Physics dice settle, never freeze.** A roll runs lift → hover → phys → hold → tiltOut. `restDie()` settles a die using a tolerant floor-proximity test (not penetration, which flickers `onFloor` and stalls), plus a "stuck" fallback for a near-motionless die. `PHYS_MAX` is a generous safety cap only — the phys phase ends as soon as the dice settle, so it is reached only by a die genuinely still bouncing (which then finishes naturally rather than freezing mid-air). Tune feel via `opts.cfg`.
+- **Physics dice settle within a 6 s budget.** A roll runs lift → hover → phys → hold → tiltOut. `restDie()` marks a die settled once it has been on the floor, slow, and lying flat for `CALM_T`; the phys phase ends when both dice settle or at `PHYS_MAX` (the 6 s settle budget, matching the standalone prototype). The budget is generous on purpose: a die always reaches a natural rest before the cap, so the cap never freezes a still-bouncing die. The hot physics/render paths are allocation-light (per-die vertex rotations cached once per substep/frame in `_rv`/`_rvr`, in-place integration), and the RAF loop stops entirely when idle. Tune feel via `opts.cfg` — **do not** retune the physics constants without re-checking the look.
+- **Dice are fair and verifiable.** `PixelDicePhysics(...).simulateResult([forced])` runs one roll's real physics headlessly (no rendering, no RAF, fixed 60 fps step) and returns the settled faces — it shares `beginRoll`/`advance` with the animated path, so sampled outcomes match the game. `scripts/measure-dice-fairness.js` uses it to sample the distribution at scale (~1000 rolls/s; each face ≈16.667%, χ² within fair range). Validate any physics change against it, plus a per-frame canvas hash, so neither the look nor the distribution drifts. Footprint + further wins: see `docs/DICE_OPTIMIZATIONS.md`.
 - **No build step** — plain browser JS, no modules/bundlers. All engine classes attach to `window`.
 - **Script load order matters** in `index.html` — dependencies (die, dice-pool, item, render/) load before consumers (character, main).
 

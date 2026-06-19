@@ -49,6 +49,16 @@
     const tx = 2 * (y * p[2] - z * p[1]), ty = 2 * (z * p[0] - x * p[2]), tz = 2 * (x * p[1] - y * p[0]);
     return [p[0] + w * tx + (y * tz - z * ty), p[1] + w * ty + (z * tx - x * tz), p[2] + w * tz + (x * ty - y * tx)];
   };
+  // Same math as qrot, written into `out` — lets hot loops rotate without
+  // allocating a fresh array per call.
+  const qrotInto = (out, q, p) => {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    const tx = 2 * (y * p[2] - z * p[1]), ty = 2 * (z * p[0] - x * p[2]), tz = 2 * (x * p[1] - y * p[0]);
+    out[0] = p[0] + w * tx + (y * tz - z * ty);
+    out[1] = p[1] + w * ty + (z * tx - x * tz);
+    out[2] = p[2] + w * tz + (x * ty - y * tx);
+    return out;
+  };
   function qslerp(a, c, t) {
     let d = a[0] * c[0] + a[1] * c[1] + a[2] * c[2] + a[3] * c[3];
     if (d < 0) { c = [-c[0], -c[1], -c[2], -c[3]]; d = -d; }
@@ -118,11 +128,11 @@
 
   // ---------- world + physics constants ----------
   const WX = 2.55, WZ = 2.55, APEX = 3.0, BOX_H = 3.4;
-  const GRAV = [0, -27, 0];
+  const GRAV = [0, -23, 0];
   const TOP = { yaw: 0, pitch: Math.PI / 2 }, ISO = { yaw: Math.PI / 4, pitch: 0.585 };
   const invM = 1, INERTIA = (2 / 3) * HS * HS, invI = 1 / INERTIA;
-  const E_FLOOR = 0.32, E_WALL = 0.42, MU = 0.5, BOUNCE_MIN = 2.4, BOUNCE_GAIN = 0.5, MAXB = 3;
-  const RIGHT_RATE = 14, RIGHT_DAMP = 0.55;
+  const E_FLOOR = 0.45, E_WALL = 0.66, MU = 0.5, BOUNCE_MIN = 1.8, BOUNCE_GAIN = 0.8, MAXB = 7;
+  const RIGHT_RATE = 11, RIGHT_DAMP = 0.55;
   const PLANES = [
     { n: [-1, 0, 0], off: -WX, e: E_WALL },
     { n: [1, 0, 0], off: -WX, e: E_WALL },
@@ -130,15 +140,16 @@
     { n: [0, 0, 1], off: -WZ, e: E_WALL },
   ];
   const E_DIE = 0.5;
-  const V_REST = 0.42, W_REST = 1.0, CALM_T = 0.16, STUCK_T = 0.45;
+  const V_REST = 0.42, W_REST = 1.0, CALM_T = 0.18;
 
   const smooth = t => t * t * (3 - 2 * t);
   const easeOut = t => 1 - Math.pow(1 - t, 3);
 
   // ---------- physics (operate on plain die objects) ----------
   function floorResolve(d) {
+    const RV = d._rv;
     let deepest = 0; const contacts = [];
-    for (const lv of VERT) { const wv = add(d.p, qrot(d.q, lv)); if (wv[1] < 0) { contacts.push(wv); if (wv[1] < deepest) deepest = wv[1]; } }
+    for (let k = 0; k < 8; k++) { const wv = add(d.p, RV[k]); if (wv[1] < 0) { contacts.push(wv); if (wv[1] < deepest) deepest = wv[1]; } }
     if (!contacts.length) return;
     d.onFloor = true; d.p[1] -= deepest;
     let approach = 0;
@@ -165,8 +176,9 @@
   }
   function planeContact(d, pl) {
     const n = pl.n;
+    const RV = d._rv;
     let deepest = 0; const contacts = [];
-    for (const lv of VERT) { const wv = add(d.p, qrot(d.q, lv)); const sd = dot(wv, n) - pl.off; if (sd < 0) { contacts.push(wv); if (sd < deepest) deepest = sd; } }
+    for (let k = 0; k < 8; k++) { const wv = add(d.p, RV[k]); const sd = dot(wv, n) - pl.off; if (sd < 0) { contacts.push(wv); if (sd < deepest) deepest = sd; } }
     if (!contacts.length) return;
     if (n[1] > 0.5) d.onFloor = true;
     d.p = add(d.p, mul(n, -deepest * 0.9));
@@ -239,10 +251,16 @@
   function stepDie(d, dt) {
     if (d.settled) return;
     d.onFloor = false;
-    d.v = add(d.v, mul(GRAV, dt));
-    d.v = mul(d.v, 0.995); d.w = mul(d.w, 0.985);
-    d.p = add(d.p, mul(d.v, dt));
+    // In-place integration — identical arithmetic to v=add(v,g*dt); v*=0.999;
+    // w*=0.995; p=add(p,v*dt), but mutates in place (no per-substep arrays).
+    d.v[0] += GRAV[0] * dt; d.v[1] += GRAV[1] * dt; d.v[2] += GRAV[2] * dt;
+    d.v[0] *= 0.999; d.v[1] *= 0.999; d.v[2] *= 0.999;
+    d.w[0] *= 0.995; d.w[1] *= 0.995; d.w[2] *= 0.995;
+    d.p[0] += d.v[0] * dt; d.p[1] += d.v[1] * dt; d.p[2] += d.v[2] * dt;
     d.q = qintegrate(d.q, d.w, dt);
+    // Cache the 8 world-space vertex rotations once; floorResolve and the four
+    // wall planes all reuse them (q is constant until the righting step below).
+    for (let k = 0; k < 8; k++) qrotInto(d._rv[k], d.q, VERT[k]);
     floorResolve(d);
     for (const pl of PLANES) planeContact(d, pl);
     if (d.onFloor && len(d.v) < 1.5 && len(d.w) < 3.6) {
@@ -264,23 +282,9 @@
   }
   function restDie(d, frameDt) {
     if (d.settled) return;
-    // Tolerant ground test: a die at rest sits with its lowest vertex at ~0 and
-    // may register no floor penetration on a given frame, so `onFloor` flickers
-    // off and the calm timer keeps resetting — the die stops moving but never
-    // settles. Test proximity to the floor instead of penetration.
-    let minY = 1e9, up = -2;
-    for (const lv of VERT) { const wy = d.p[1] + qrot(d.q, lv)[1]; if (wy < minY) minY = wy; }
-    for (const f of FACEDEF) { const y = qrot(d.q, f.n)[1]; if (y > up) up = y; }
-    const grounded = minY < 0.03, v = len(d.v), w = len(d.w);
-    // Clean rest: grounded, slow, and lying flat — settle promptly.
-    if (grounded && v < V_REST && w < W_REST && up > 0.985) d.calm += frameDt; else d.calm = 0;
-    // Stuck fallback: near-motionless but not perfectly flat (wedged on an edge
-    // or against a wall). Guarantees the phys phase ends instead of running out
-    // to PHYS_MAX and freezing the dice mid-bounce.
-    if (grounded && v < V_REST * 0.6 && w < W_REST * 0.6) d.stuck += frameDt; else d.stuck = 0;
-    if (d.calm > CALM_T || d.stuck > STUCK_T) {
-      d.settled = true; d.v = [0, 0, 0]; d.w = [0, 0, 0]; d.result = topFace(d.q);
-    }
+    let up = -2; for (const f of FACEDEF) { const y = qrot(d.q, f.n)[1]; if (y > up) up = y; }
+    if (d.onFloor && len(d.v) < V_REST && len(d.w) < W_REST && up > 0.985) d.calm += frameDt; else d.calm = 0;
+    if (d.calm > CALM_T) { d.settled = true; d.v = [0, 0, 0]; d.w = [0, 0, 0]; d.result = topFace(d.q); }
   }
 
   function hull2(pts) {
@@ -291,13 +295,11 @@
     lo.pop(); up.pop(); return lo.concat(up);
   }
 
-  // Default phase timings (ms). The fixed phases are snappier than the standalone
-  // tuner so an in-game roll resolves quickly. PHYS_MAX is only a safety cap: the
-  // phys phase ends the instant the dice settle (reliably fast via restDie's calm
-  // /stuck timers), so the cap is kept generous and is reached only by a die that
-  // is genuinely still bouncing — which must finish naturally, never be frozen
-  // mid-air. Override any of these via opts.cfg.
-  const DEFAULTS = { LIFT: 300, HOVER: 200, HOLD: 150, TILT_OUT: 320, PHYS_MAX: 3000 };
+  // Default phase timings (ms). PHYS_MAX is the settle budget: it matches the
+  // standalone 6s so the dice always reach a natural rest before the cap, so the
+  // cap never freezes a still-bouncing die. The phys phase still ends the instant
+  // both dice settle, so a normal roll resolves well before 6s. Override via cfg.
+  const DEFAULTS = { LIFT: 420, HOVER: 360, HOLD: 240, TILT_OUT: 460, PHYS_MAX: 6000 };
 
   // ---------- instance factory ----------
   global.PixelDicePhysics = function createPhysicsDice(opts) {
@@ -354,8 +356,10 @@
       const r = 1 + Math.floor(Math.random() * 6);
       return {
         p: home.slice(), v: [0, 0, 0], q: squareUp(qfromTo(NORMAL_OF[r], [0, 1, 0])), w: [0, 0, 0],
-        result: r, onFloor: true, calm: 1, stuck: 0, settled: true, axis: [0, 1, 0], spin: 0, bounces: 0,
-        home: home.slice(), p0: home.slice(), q0: [0, 0, 0, 1], qT: [0, 0, 0, 1]
+        result: r, onFloor: true, calm: 1, settled: true, axis: [0, 1, 0], spin: 0, bounces: 0,
+        home: home.slice(), p0: home.slice(), q0: [0, 0, 0, 1], qT: [0, 0, 0, 1],
+        _rv: Array.from({ length: 8 }, () => [0, 0, 0]),  // physics: rotated verts (per substep)
+        _rvr: Array.from({ length: 8 }, () => [0, 0, 0])  // render: rotated verts (per frame)
       };
     }
     let dice = [];
@@ -373,11 +377,10 @@
     let forced = null, lastResults = null, returnFired = false;
     let onReturn = null, onDone = null;
 
-    function roll(results, o) {
-      if (phase !== 'idle') return getResults();
-      o = o || {};
-      onReturn = o.onReturn || null;
-      onDone = o.onDone || null;
+    // Arm a roll: randomize each die's tumble axis/spin and enter the lift phase.
+    // Shared by roll() (animated) and simulateResult() (headless), so both draw
+    // the same launch conditions from the RNG in the same order.
+    function beginRoll(results) {
       forced = (results && results.length >= NDICE) ? results.slice(0, NDICE) : null;
       returnFired = false;
       for (const d of dice) {
@@ -385,9 +388,17 @@
         d.axis = norm(d.axis);
         d.spin = 13 + Math.random() * 5;
         d.q0 = d.q.slice();
-        d.settled = false; d.onFloor = false; d.calm = 0; d.stuck = 0; d.bounces = 0;
+        d.settled = false; d.onFloor = false; d.calm = 0; d.bounces = 0;
       }
       phase = 'lift'; pt = 0; physClock = 0;
+    }
+
+    function roll(results, o) {
+      if (phase !== 'idle') return getResults();
+      o = o || {};
+      onReturn = o.onReturn || null;
+      onDone = o.onDone || null;
+      beginRoll(results);
       ensureLoop();
       return getResults();
     }
@@ -429,7 +440,8 @@
       const h = Math.max(0, d.p[1] - HS);
       const grow = 1 + h * 0.12;
       const ox = d.p[0] - LIGHT[0] * h * 0.18, oz = d.p[2] - LIGHT[2] * h * 0.18;
-      const pts = VERT.map(v => { const w = add(d.p, qrot(d.q, v)); return [ox + (w[0] - d.p[0]) * grow, oz + (w[2] - d.p[2]) * grow]; });
+      // w[i] - d.p[i] is exactly the rotated vertex, already cached this frame.
+      const pts = d._rvr.map(rv => [ox + rv[0] * grow, oz + rv[2] * grow]);
       const hull = hull2(pts);
       const a = Math.max(0.05, 0.4 - h * 0.05);
       const ring = (scale, alpha) => {
@@ -442,7 +454,7 @@
     }
     const REFL_RANGE = 1.9, REFL_GAIN = 0.55;
     function drawDie(d, all) {
-      const sv = VERT.map(v => project(add(d.p, qrot(d.q, v))));
+      const sv = d._rvr.map(rv => project(add(d.p, rv)));
       const faces = [];
       for (const f of FACEDEF) {
         const wn = qrot(d.q, f.n);
@@ -490,6 +502,8 @@
       setCam(TOP.yaw + (ISO.yaw - TOP.yaw) * camT, TOP.pitch + (ISO.pitch - TOP.pitch) * camT);
       recenter();
       drawBg(); drawBox();
+      // Cache each die's 8 rotated vertices once; drawShadow + drawDie share them.
+      for (const d of dice) for (let k = 0; k < 8; k++) qrotInto(d._rvr[k], d.q, VERT[k]);
       for (const d of dice) drawShadow(d);
       const order = dice.map((_, i) => i).sort((a, c) => viewOf(dice[c].p)[2] - viewOf(dice[a].p)[2]);
       for (const i of order) drawDie(dice[i], dice);
@@ -497,10 +511,9 @@
       ctx.drawImage(buf, 0, 0, BW, BH, 0, 0, canvas.width, canvas.height);
     }
 
-    // ---- main loop (runs only while a roll is in flight) ----
-    function frame(now) {
-      const frameDt = Math.min(0.05, (now - last) / 1000) || 0; last = now;
-
+    // Per-frame state machine — no rendering, no RAF. Reused by the headless
+    // sampler (simulateResult) so sampled outcomes use the exact roll physics.
+    function advance(frameDt) {
       if (phase === 'lift') {
         pt += frameDt * 1000; const t = Math.min(1, pt / cfg.LIFT); camT = smooth(t);
         const spinFrac = t * t;
@@ -556,7 +569,12 @@
           const cb = onDone; onDone = null; if (cb) cb(getResults());
         }
       } else { camT = 0; }
+    }
 
+    // ---- main loop (runs only while a roll is in flight) ----
+    function frame(now) {
+      const frameDt = Math.min(0.05, (now - last) / 1000) || 0; last = now;
+      advance(frameDt);
       render();
       if (phase !== 'idle') { rafId = requestAnimationFrame(frame); }
       else { running = false; rafId = 0; }
@@ -577,6 +595,27 @@
     function isRolling() { return phase !== 'idle'; }
     function destroy() { if (rafId) cancelAnimationFrame(rafId); running = false; phase = 'idle'; dice = []; }
 
+    // Headless: run one roll's real physics (lift → hover → phys) at a fixed
+    // 60fps step, with no rendering or RAF, and return the settled faces. Lets a
+    // harness sample the true outcome distribution at scale (probability checks).
+    function simulateResult(forcedFaces) {
+      if (phase !== 'idle') return getResults();
+      onReturn = null; onDone = null;
+      beginRoll(forcedFaces);
+      const dt = 1 / 60;
+      let guard = 0;
+      while (phase !== 'idle' && guard++ < 6000) { advance(dt); if (lastResults) break; }
+      const res = lastResults ? lastResults.slice() : dice.map(d => d.result);
+      // reset to a clean idle rest pose so the instance can be reused
+      lastResults = null; phase = 'idle'; pt = 0; camT = 0; physClock = 0; returnFired = false;
+      for (const d of dice) {
+        d.q = squareUp(d.q); d.p = d.home.slice();
+        d.v = [0, 0, 0]; d.w = [0, 0, 0]; d.settled = true; d.onFloor = true; d.calm = 1;
+        d.result = topFace(d.q);
+      }
+      return res;
+    }
+
     setCount(NDICE);
 
     return {
@@ -585,6 +624,7 @@
       setCount,
       getResults,
       isRolling,
+      simulateResult,
       destroy,
     };
   };

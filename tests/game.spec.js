@@ -40,6 +40,15 @@ test('a deterministic roll moves the token by the dice sum', async ({ page }) =>
 
 test('clicking the roll button rolls valid dice and advances the token', async ({ page }) => {
   await page.getByTestId('roll-button').click();
+  // A random roll of 10–12 crosses the tile-10 shop; close it so movement
+  // resumes to the final tile (position still ends up equal to the dice sum).
+  await page.waitForFunction(() => {
+    const s = window.__game.getState();
+    return s.gameState === 'shop' || (!s.rolling && s.gameState === 'board');
+  }, { timeout: 20000 });
+  await page.evaluate(() => {
+    if (window.__game.getState().gameState === 'shop') window.__game.closeShop();
+  });
   await waitUntilStopped(page);
 
   const state = await page.evaluate(() => window.__game.getState());
