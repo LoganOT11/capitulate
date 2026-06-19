@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Dice</title>
+<style>
+  :root{ --bg:#1a2230; --bone:#e7d9c4; --gold:#ecc15a; --ink:#2a1d2e; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#10151f; color:var(--bone);
+    font-family:ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+    display:flex;align-items:flex-start;justify-content:center;min-height:100%;padding:24px;
+  }
+  .stage{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:760px}
+  .eyebrow{letter-spacing:.42em;text-transform:uppercase;font-size:11px;color:var(--gold);opacity:.8;padding-left:.42em}
+  canvas#screen{width:100%;display:block;image-rendering:pixelated;border-radius:4px;
+    box-shadow:0 16px 40px rgba(0,0,0,.5)}
+  .readout{font-size:13px;letter-spacing:.08em;opacity:.8;min-height:1.2em;text-align:center}
+  .readout b{color:var(--gold)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+  .count{display:flex;gap:4px;background:rgba(0,0,0,.28);padding:4px;border-radius:5px}
+  .count button{font:inherit;font-size:12px;color:var(--bone);background:none;border:none;padding:7px 13px;border-radius:3px;cursor:pointer;opacity:.55}
+  .count button.on{background:rgba(236,193,90,.16);color:var(--gold);opacity:1}
+  .roll{font:inherit;letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--ink);
+    background:linear-gradient(180deg,#f0cf76,#d99a3d);border:none;border-bottom:3px solid #8a5f24;
+    border-radius:3px;padding:13px 32px;cursor:pointer;transition:transform .04s, filter .12s}
+  .roll:hover{filter:brightness(1.06)}
+  .roll:active{transform:translateY(2px);border-bottom-width:1px}
+  .roll:disabled{filter:saturate(.4) brightness(.85);cursor:default;transform:none}
+  .roll:focus-visible,.count button:focus-visible,.dietype button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .dietype{display:flex;gap:4px;background:rgba(0,0,0,.28);padding:4px;border-radius:5px;flex-wrap:wrap;justify-content:center}
+  .dietype button{display:flex;align-items:center;gap:7px;font:inherit;font-size:12px;color:var(--bone);background:none;border:none;padding:6px 11px;border-radius:3px;cursor:pointer;opacity:.5}
+  .dietype button.on{background:rgba(236,193,90,.16);color:var(--gold);opacity:1}
+  .dietype .sw{width:11px;height:11px;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+
+  .panel{width:100%;background:rgba(0,0,0,.28);border:1px solid rgba(236,193,90,.14);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:16px;margin-top:4px}
+  .panel h3{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);opacity:.65;font-weight:normal;margin-bottom:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:11px 20px}
+  .sld{display:flex;flex-direction:column;gap:6px}
+  .sld .row{display:flex;justify-content:space-between;align-items:baseline;font-size:11px}
+  .sld .row span{opacity:.75}
+  .sld .row b{color:var(--gold);font-weight:normal;font-variant-numeric:tabular-nums}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;background:rgba(255,255,255,.12);border-radius:2px;cursor:pointer;margin:4px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--gold);border:2px solid #1a1208;cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--gold);border:none;cursor:pointer}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .btn{font:inherit;font-size:11px;letter-spacing:.05em;color:var(--bone);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:7px 13px;cursor:pointer;transition:border-color .12s}
+  .btn:hover{border-color:rgba(236,193,90,.45)}
+  .btn.gold{color:var(--ink);background:linear-gradient(180deg,#f0cf76,#d99a3d);border:none;letter-spacing:.06em}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:11px;opacity:.85;cursor:pointer;margin-left:auto;user-select:none}
+  .toggle input{accent-color:var(--gold)}
+  .presets{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:flex;align-items:center;font-size:11px;background:rgba(236,193,90,.1);border:1px solid rgba(236,193,90,.25);border-radius:20px;overflow:hidden}
+  .chip .nm{padding:6px 4px 6px 13px;cursor:pointer}
+  .chip:hover{background:rgba(236,193,90,.18)}
+  .chip .del{border:none;background:none;color:var(--bone);opacity:.45;cursor:pointer;font:inherit;font-size:10px;padding:6px 9px 6px 5px}
+  .chip .del:hover{opacity:1;color:#ff8a8a}
+  .empty{font-size:11px;opacity:.4;font-style:italic}
+  details summary{cursor:pointer;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);opacity:.65;list-style:none;outline:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:'▸ ';opacity:.6}
+  details[open] summary::before{content:'▾ '}
+  textarea.code{width:100%;height:120px;background:#0c1118;color:#9fb4c8;border:1px solid rgba(255,255,255,.1);border-radius:5px;padding:10px;font:inherit;font-size:11px;line-height:1.5;resize:vertical;margin-top:10px}
+  .muted{font-size:10px;opacity:.45;letter-spacing:.03em}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.88);color:var(--gold);border:1px solid rgba(236,193,90,.3);padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="eyebrow">roll</div>
+    <canvas id="screen" width="720" height="540"></canvas>
+    <div class="readout" id="readout">Roll to begin</div>
+    <div class="controls">
+      <div class="count" id="count">
+        <button data-n="1" class="on">1</button>
+        <button data-n="3">3</button>
+        <button data-n="6">6</button>
+        <button data-n="20">20</button>
+      </div>
+      <button class="roll" id="rollBtn">Roll</button>
+    </div>
+    <div class="dietype" id="dietype"></div>
+
+    <div class="panel">
+      <div class="btns">
+        <button class="btn gold" id="saveBtn">★ Save this look</button>
+        <button class="btn" id="copyBtn">Copy settings</button>
+        <button class="btn" id="resetBtn">Reset</button>
+        <label class="toggle"><input type="checkbox" id="autoRoll"> Auto-roll</label>
+      </div>
+      <div>
+        <h3>Saved looks</h3>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div id="sliders"></div>
+      <details>
+        <summary>settings code</summary>
+        <textarea class="code" id="code" spellcheck="false"></textarea>
+        <div class="btns" style="margin-top:8px">
+          <button class="btn" id="applyCode">Apply from text</button>
+          <span class="muted">Paste a saved look here, or copy this text to keep it permanently.</span>
+        </div>
+      </details>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ===========================================================
+ *  Pixel slot-machine dice.
+ *  Faces are procedurally lit (height field -> normals ->
+ *  diffuse + specular + AO -> posterized material ramp), the
+ *  render-to-pixels look. Cached per resolution TIER and per
+ *  MATERIAL, blitted at whole-pixel positions only (no smoosh).
+ * =========================================================== */
+
+const screen = document.getElementById('screen');
+const ctx = screen.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const rollBtn = document.getElementById('rollBtn');
+const readout = document.getElementById('readout');
+
+const PIXEL = 4;
+const BW = screen.width / PIXEL, BH = screen.height / PIXEL;   // 180 x 135
+const buf = document.createElement('canvas'); buf.width = BW; buf.height = BH;
+const b = buf.getContext('2d');
+b.imageSmoothingEnabled = false;
+
+const ORDER = [1,2,3,4,5,6];
+const faceForSlot = k => ORDER[((k % 6) + 6) % 6];
+const mod6 = x => ((x % 6) + 6) % 6;
+const PIPS = {
+  1:[[0,0]], 2:[[-.5,-.5],[.5,.5]], 3:[[-.5,-.5],[0,0],[.5,.5]],
+  4:[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]],
+  5:[[-.5,-.5],[.5,-.5],[0,0],[-.5,.5],[.5,.5]],
+  6:[[-.5,-.6],[-.5,0],[-.5,.6],[.5,-.6],[.5,0],[.5,.6]],
+};
+const pipUnit = FS => Math.max(1, Math.round(FS/16));
+
+// ---------- spin config (tuner) ----------
+const DEFAULTS = {
+  dur:2800, stagger:200, rate:0.018, minSpins:5,
+  accel:3.3, settle:0.8,
+  bounceAmp:0.5, bounceCyc:2.8, squash:0,
+  blurFull:1.2,
+};
+const SLIDERS = [
+  {k:'dur',      label:'Spin length', min:600,  max:3000, step:50,   unit:'ms',   grp:'Timing'},
+  {k:'stagger',  label:'Reel stagger',min:0,    max:400,  step:10,   unit:'ms',   grp:'Timing'},
+  {k:'rate',     label:'Spin speed',  min:0.008,max:0.045,step:0.001,unit:'f/ms', grp:'Timing'},
+  {k:'minSpins', label:'Min spins',   min:1,    max:8,    step:1,    unit:'×',    grp:'Timing'},
+  {k:'accel',    label:'Slow start',  min:1,    max:4,    step:0.05, unit:'',     grp:'Curve'},
+  {k:'settle',   label:'Settle point',min:0.6,  max:0.98, step:0.01, unit:'',     grp:'Curve'},
+  {k:'bounceAmp',label:'Bounce',      min:0,    max:0.5,  step:0.01, unit:'',     grp:'Bounce & blur'},
+  {k:'bounceCyc',label:'Wobble',      min:0.5,  max:5,    step:0.1,  unit:'×',    grp:'Bounce & blur'},
+  {k:'squash',   label:'Squash',      min:0,    max:0.5,  step:0.01, unit:'',     grp:'Bounce & blur'},
+  {k:'blurFull', label:'Blur thresh', min:0.2,  max:1.2,  step:0.02, unit:'',     grp:'Bounce & blur'},
+];
+const GROUPS = ['Timing','Curve','Bounce & blur'];
+
+const CK_CFG='pixelDice.cfg.v2', CK_PRE='pixelDice.presets.v1', CK_THEME='pixelDice.theme.v1';
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+};
+function sanitize(o){ const r={}; if(o) for(const k in DEFAULTS){ if(typeof o[k]==='number' && isFinite(o[k])) r[k]=o[k]; } return r; }
+let CFG = Object.assign({}, DEFAULTS, sanitize(store.get(CK_CFG)));
+
+// ---------- material / die types ----------
+const clamp=(v,a,bb)=>v<a?a:v>bb?bb:v;
+const smoothstep=(a,bb,x)=>{const t=clamp((x-a)/(bb-a),0,1);return t*t*(3-2*t);};
+function normalize(v){const m=Math.hypot(v[0],v[1],v[2])||1;return [v[0]/m,v[1]/m,v[2]/m];}
+function lookup(stops,t){
+  t=clamp(t,0,1);
+  for(let i=0;i<stops.length-1;i++){ if(t<=stops[i+1][0]){
+    const a=stops[i],c=stops[i+1],f=(t-a[0])/((c[0]-a[0])||1);
+    return [a[1][0]+(c[1][0]-a[1][0])*f, a[1][1]+(c[1][1]-a[1][1])*f, a[1][2]+(c[1][2]-a[1][2])*f];
+  }}
+  return stops[stops.length-1][1].slice();
+}
+const GEOM = { amb:0.32, bands:8, chamfer:0.17, corner:0.16, dome:0.13,
+               pitDepth:0.60, relief:0.085, shininess:16, specStr:0.8, ao:0.55 };
+const LIGHT = [-0.6,-0.66,0.46];
+
+// A die "type" is one object. Copy + tweak to add a new one.
+const THEMES = {
+  gold:{ name:'Gold', accent:'rgba(236,193,90,0.5)', pipShape:'plus',
+    body:[[0,[44,26,46]],[.18,[96,46,56]],[.36,[152,76,50]],[.54,[198,122,52]],[.72,[230,168,74]],[.86,[246,208,122]],[1,[255,242,200]]],
+    pip:[[0,[16,10,20]],[.55,[46,30,42]],[1,[96,64,74]]], spec:[255,248,225] },
+  ivory:{ name:'Ivory', accent:'rgba(214,206,184,0.5)', pipShape:'plus',
+    body:[[0,[58,52,62]],[.22,[112,100,98]],[.42,[162,148,138]],[.62,[202,190,172]],[.8,[228,220,202]],[1,[249,245,234]]],
+    pip:[[0,[30,28,38]],[.55,[62,58,68]],[1,[104,98,108]]], spec:[255,255,250] },
+  crimson:{ name:'Crimson', accent:'rgba(228,120,96,0.5)', pipShape:'plus',
+    body:[[0,[36,8,18]],[.2,[86,16,30]],[.4,[140,28,40]],[.6,[188,48,52]],[.8,[224,96,88]],[1,[250,176,156]]],
+    pip:[[0,[18,4,10]],[.55,[50,16,24]],[1,[96,38,42]]], spec:[255,222,210] },
+  obsidian:{ name:'Obsidian', accent:'rgba(150,165,205,0.5)', pipShape:'plus',
+    body:[[0,[10,12,18]],[.25,[26,30,42]],[.5,[50,56,74]],[.7,[80,90,114]],[.85,[124,134,162]],[1,[200,210,236]]],
+    pip:[[0,[120,124,140]],[.55,[182,186,202]],[1,[238,241,250]]], spec:[235,240,255] },
+  jade:{ name:'Jade', accent:'rgba(120,200,150,0.5)', pipShape:'plus',
+    body:[[0,[12,30,24]],[.25,[22,60,44]],[.5,[42,98,68]],[.7,[72,142,98]],[.85,[122,188,136]],[1,[204,238,204]]],
+    pip:[[0,[10,22,18]],[.55,[32,58,46]],[1,[74,114,88]]], spec:[240,255,240] },
+};
+function buildTheme(key){ return Object.assign({}, GEOM, THEMES[key]); }
+let themeKey = THEMES[store.get(CK_THEME)] ? store.get(CK_THEME) : 'gold';
+let theme = buildTheme(themeKey);
+
+// ---------- procedural die renderer ----------
+function buildHeight(FS, v, th){
+  const H=new Float32Array(FS*FS), inside=new Uint8Array(FS*FS),
+        isPip=new Uint8Array(FS*FS), pitD=new Float32Array(FS*FS);
+  const hw=FS/2, cx=FS/2, cy=FS/2, r=FS*th.corner, cw=FS*th.chamfer, u=pipUnit(FS), half=FS/2;
+  const pips = v ? PIPS[v].map(([px,py])=>[half*(1+0.6*px), half*(1+0.6*py)]) : [];
+  const arm=1.5*u, thick=u/2, rad=1.25*u, wall=Math.max(1,u*0.55);
+  function sdfIn(x,y){
+    const qx=Math.abs(x-cx)-(hw-r), qy=Math.abs(y-cy)-(hw-r);
+    const out=Math.hypot(Math.max(qx,0),Math.max(qy,0));
+    const ins=Math.min(Math.max(qx,qy),0);
+    return -(out+ins-r);
+  }
+  function pipAmt(x,y){
+    let best=0;
+    for(const [px,py] of pips){
+      let d;
+      if(th.pipShape==='round') d=rad-Math.hypot(x-px,y-py);
+      else { const dv=Math.min(thick-Math.abs(x-px), arm-Math.abs(y-py));
+             const dh=Math.min(arm-Math.abs(x-px), thick-Math.abs(y-py)); d=Math.max(dv,dh); }
+      const a=clamp(d/wall,0,1); if(a>best) best=a;
+    }
+    return best;
+  }
+  for(let y=0;y<FS;y++) for(let x=0;x<FS;x++){
+    const di=sdfIn(x,y), idx=y*FS+x;
+    if(di<=0) continue;
+    inside[idx]=1;
+    let h=smoothstep(0,cw,di);
+    const dd=Math.hypot(x-cx,y-cy)/hw; h+=th.dome*(1-dd*dd);
+    const pa=pipAmt(x,y);
+    if(pa>0){ h-=th.pitDepth*pa; pitD[idx]=pa; if(pa>0.5) isPip[idx]=1; }
+    H[idx]=h;
+  }
+  return {H,inside,isPip,pitD};
+}
+function shadeDie(g, FS, v, th){
+  const {H,inside,isPip,pitD}=buildHeight(FS,v,th);
+  const img=g.createImageData(FS,FS), d=img.data;
+  const L=normalize(LIGHT), Hh=normalize([L[0],L[1],L[2]+1]);
+  const relief=FS*th.relief;
+  for(let y=0;y<FS;y++) for(let x=0;x<FS;x++){
+    const idx=y*FS+x, o=idx*4;
+    if(!inside[idx]){ d[o+3]=0; continue; }
+    const xl=x>0?x-1:x, xr=x<FS-1?x+1:x, yu=y>0?y-1:y, yd=y<FS-1?y+1:y;
+    let nx=(H[y*FS+xl]-H[y*FS+xr])*relief, ny=(H[yu*FS+x]-H[yd*FS+x])*relief, nz=1;
+    const iv=1/Math.hypot(nx,ny,nz); nx*=iv;ny*=iv;nz*=iv;
+    let diff=nx*L[0]+ny*L[1]+nz*L[2]; if(diff<0)diff=0;
+    let bright=th.amb+(1-th.amb)*diff;
+    let sp=nx*Hh[0]+ny*Hh[1]+nz*Hh[2]; if(sp<0)sp=0; sp=Math.pow(sp,th.shininess)*th.specStr;
+    let col;
+    if(isPip[idx]){
+      let bp=clamp(bright*(1-th.ao*pitD[idx]),0,1);
+      bp=Math.round(bp*(th.bands-1))/(th.bands-1);
+      col=lookup(th.pip,bp);
+      const s=sp*0.5; col=[col[0]+(th.spec[0]-col[0])*s, col[1]+(th.spec[1]-col[1])*s, col[2]+(th.spec[2]-col[2])*s];
+    } else {
+      let bb=Math.round(clamp(bright,0,1)*(th.bands-1))/(th.bands-1);
+      col=lookup(th.body,bb);
+      const glint=Math.min(1,Math.max(0,sp-0.35)*2.2);
+      if(glint>0) col=[col[0]+(th.spec[0]-col[0])*glint, col[1]+(th.spec[1]-col[1])*glint, col[2]+(th.spec[2]-col[2])*glint];
+    }
+    d[o]=clamp(col[0],0,255); d[o+1]=clamp(col[1],0,255); d[o+2]=clamp(col[2],0,255); d[o+3]=255;
+  }
+  g.putImageData(img,0,0);
+}
+
+// ---------- sprite cache (per tier + material) ----------
+let curFS=0, curTheme=null, faceSprites={}, bodySprite=null;
+function buildSprites(FS, th){
+  curFS=FS; curTheme=th.name; faceSprites={};
+  for(let v=1;v<=6;v++){
+    const c=document.createElement('canvas'); c.width=FS; c.height=FS;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=false; shadeDie(g,FS,v,th); faceSprites[v]=c;
+  }
+  const bc=document.createElement('canvas'); bc.width=FS; bc.height=FS;
+  const bg=bc.getContext('2d'); bg.imageSmoothingEnabled=false; shadeDie(bg,FS,null,th); bodySprite=bc;
+}
+
+// ---------- state & layout ----------
+let dice=[], count=1, cells=[], rolling=false, t0=0, ROLL_MAX=0;
+const TIERS = [16,24,32,48,64,90];
+function chooseTier(cellW,cellH){
+  const lim=Math.min(cellW,cellH)*0.94; let best=TIERS[0];
+  for(const T of TIERS) if(T<=lim) best=T;
+  return best;
+}
+function roundRect(c,x,y,w,h,r){
+  if(c.roundRect){ c.beginPath(); c.roundRect(x,y,w,h,r); return; }
+  r=Math.min(r,w/2,h/2);
+  c.beginPath();
+  c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+}
+function layout(){
+  const perRow = count<=3?count:(count<=6?3:5);
+  const rows = Math.ceil(count/perRow);
+  const cellW = BW/perRow, cellH = BH/rows;
+  const FS = chooseTier(cellW,cellH);
+  cells=[];
+  for(let i=0;i<count;i++){
+    const r=Math.floor(i/perRow), inRow=Math.min(perRow,count-r*perRow);
+    const off=(BW-inRow*cellW)/2, cc=i-r*perRow;
+    cells.push({cx:off+(cc+0.5)*cellW, cy:(r+0.5)*cellH});
+  }
+  if(FS!==curFS || theme.name!==curTheme) buildSprites(FS, theme);
+}
+function setCount(n){
+  count=n;
+  dice=Array.from({length:n},()=>{
+    const r=1+Math.floor(Math.random()*6), s=ORDER.indexOf(r);
+    return {result:r, prev:r, pos:s, slot0:s, spinFaces:0, start:0, dur:CFG.dur, p:0, _pp:s};
+  });
+  document.querySelectorAll('#count button').forEach(x=>x.classList.toggle('on',+x.dataset.n===n));
+  layout();
+}
+function rollAll(){
+  if(rolling) return;
+  const stag = Math.min(CFG.stagger, 1100/count);
+  ROLL_MAX=0;
+  dice.forEach((d,i)=>{
+    d.prev=d.result;
+    d.result=1+Math.floor(Math.random()*6);
+    d.slot0=ORDER.indexOf(d.prev);
+    const offset=mod6(ORDER.indexOf(d.result)-d.slot0);
+    d.start=i*stag;
+    d.dur=CFG.dur;
+    let n=Math.round((d.dur*CFG.rate - offset)/6);
+    if(n<CFG.minSpins) n=CFG.minSpins;
+    d.spinFaces=offset + 6*n;
+    d._pp=d.slot0; d.p=0;
+    ROLL_MAX=Math.max(ROLL_MAX, d.start + d.dur);
+  });
+  rolling=true; t0=performance.now();
+  rollBtn.disabled=true;
+  readout.textContent='Rolling…';
+}
+function reelState(die,p){
+  if(p<=0) return {pos:die.pos, bounce:0, sq:1};
+  if(p<CFG.settle){
+    const x=p/CFG.settle;
+    const e=Math.pow(x,CFG.accel);
+    return {pos:die.slot0 + e*die.spinFaces, bounce:0, sq:1};
+  }
+  const w=(p-CFG.settle)/(1-CFG.settle);
+  const osc=Math.sin(w*Math.PI*CFG.bounceCyc)*Math.pow(1-w,2);
+  return {pos:die.slot0 + die.spinFaces, bounce:CFG.bounceAmp*osc, sq:1+CFG.squash*osc};
+}
+
+function drawBg(){
+  b.fillStyle='#1a2230'; b.fillRect(0,0,BW,BH);
+  b.strokeStyle='rgba(255,255,255,0.035)'; b.lineWidth=1;
+  const D=13;
+  for(let c=-BH;c<BW+BH;c+=D){
+    b.beginPath(); b.moveTo(c,0); b.lineTo(c+BH,BH); b.stroke();
+    b.beginPath(); b.moveTo(c,0); b.lineTo(c-BH,BH); b.stroke();
+  }
+}
+function drawReel(cell,die,p){
+  const FS=curFS, STEP=FS, half=FS/2;
+  const cx=Math.round(cell.cx), cy=Math.round(cell.cy);
+  const x0=cx-half, y0=cy-half, rad=Math.max(2,Math.round(FS*theme.corner));
+
+  const st=reelState(die,p);
+  const speed=(p>0)?(st.pos-die._pp):0; die._pp=st.pos;
+  const blur=Math.min(1,Math.abs(speed)/CFG.blurFull);
+
+  b.save();
+  roundRect(b,x0,y0,FS,FS,rad); b.clip();
+  b.fillStyle='#120c14'; b.fillRect(x0,y0,FS,FS);
+
+  const squashing = Math.abs(st.sq-1)>0.001;
+  if(squashing){ b.save(); b.translate(cx,cy); b.scale(1,st.sq); b.translate(-cx,-cy); }
+
+  const bp=Math.round(st.bounce*STEP);
+  const kc=Math.round(st.pos);
+  const baseY=Math.round(cy + (kc-st.pos)*STEP - bp);
+  const dx=cx-half;
+  for(let k=kc-2;k<=kc+2;k++){
+    const dy = baseY - half + (k-kc)*FS;
+    if(dy>y0+FS || dy+FS<y0) continue;
+    b.drawImage(faceSprites[faceForSlot(k)], dx, dy);
+    if(blur>0){ b.globalAlpha=blur; b.drawImage(bodySprite, dx, dy); b.globalAlpha=1; }
+  }
+  if(squashing) b.restore();
+
+  const ea=(0.10+0.5*blur).toFixed(3);
+  const og=b.createLinearGradient(0,y0,0,y0+FS);
+  og.addColorStop(0,'rgba(6,4,8,'+ea+')');
+  og.addColorStop(0.34,'rgba(6,4,8,0)');
+  og.addColorStop(0.66,'rgba(6,4,8,0)');
+  og.addColorStop(1,'rgba(6,4,8,'+ea+')');
+  b.fillStyle=og; b.fillRect(x0,y0,FS,FS);
+
+  if(blur>0.35){
+    b.fillStyle='rgba(255,235,200,'+(0.05*blur).toFixed(3)+')';
+    for(let s=0;s<3;s++) b.fillRect(x0,y0+Math.round(FS*(0.28+0.22*s)),FS,1);
+  }
+  b.restore();
+
+  roundRect(b,x0+0.5,y0+0.5,FS-1,FS-1,rad);
+  b.lineWidth=1; b.strokeStyle=theme.accent; b.stroke();
+}
+
+function frame(now){
+  if(rolling){
+    const el=now-t0;
+    for(const d of dice) d.p=Math.max(0, Math.min(1, (el-d.start)/d.dur));
+    if(el>=ROLL_MAX){
+      rolling=false;
+      for(const d of dice){ d.pos=ORDER.indexOf(d.result); d.slot0=d.pos; d.p=0; d._pp=d.pos; }
+      rollBtn.disabled=false;
+      const total=dice.reduce((s,d)=>s+d.result,0);
+      readout.innerHTML = dice.length===1
+        ? 'You rolled <b>'+dice[0].result+'</b>'
+        : 'Rolled <b>'+dice.map(d=>d.result).join(' ')+'</b> · total <b>'+total+'</b>';
+      if(autoRollEl.checked) setTimeout(()=>{ if(autoRollEl.checked && !rolling) rollAll(); }, 550);
+    }
+  }
+  drawBg();
+  for(let i=0;i<dice.length;i++) drawReel(cells[i], dice[i], rolling? dice[i].p : 0);
+  ctx.clearRect(0,0,screen.width,screen.height);
+  ctx.drawImage(buf,0,0,BW,BH,0,0,screen.width,screen.height);
+  requestAnimationFrame(frame);
+}
+
+// ---------- die-type picker ----------
+const dtEl=document.getElementById('dietype');
+function buildDiePicker(){
+  dtEl.innerHTML='';
+  Object.keys(THEMES).forEach(k=>{
+    const btn=document.createElement('button'); btn.dataset.t=k;
+    if(k===themeKey) btn.classList.add('on');
+    const sw=document.createElement('span'); sw.className='sw';
+    const mid=lookup(THEMES[k].body,0.72); sw.style.background='rgb('+mid.map(c=>c|0).join(',')+')';
+    const lab=document.createElement('span'); lab.textContent=THEMES[k].name;
+    btn.append(sw,lab);
+    btn.addEventListener('click',()=>setTheme(k));
+    dtEl.appendChild(btn);
+  });
+}
+function setTheme(k){
+  themeKey=k; theme=buildTheme(k); store.set(CK_THEME,k);
+  dtEl.querySelectorAll('button').forEach(bn=>bn.classList.toggle('on',bn.dataset.t===k));
+  buildSprites(curFS, theme);
+}
+
+// =========================== TUNER UI ===========================
+const codeEl = document.getElementById('code');
+const autoRollEl = document.getElementById('autoRoll');
+const sliderEls = {};
+let presets = store.get(CK_PRE) || [];
+
+function fmt(v,step){ if(step<0.01) return (+v).toFixed(3); if(step<1) return (+v).toFixed(2); return String(+v); }
+function onCfgChange(){ store.set(CK_CFG, CFG); codeEl.value = JSON.stringify(CFG, null, 2); }
+
+function buildSliders(){
+  const cont=document.getElementById('sliders'); cont.innerHTML='';
+  GROUPS.forEach(g=>{
+    const sec=document.createElement('div'); sec.style.marginBottom='4px';
+    const h=document.createElement('h3'); h.textContent=g; sec.appendChild(h);
+    const grid=document.createElement('div'); grid.className='grid';
+    SLIDERS.filter(s=>s.grp===g).forEach(s=>{
+      const wrap=document.createElement('div'); wrap.className='sld';
+      const row=document.createElement('div'); row.className='row';
+      const lab=document.createElement('span'); lab.textContent=s.label;
+      const val=document.createElement('b');
+      row.append(lab,val);
+      const inp=document.createElement('input');
+      inp.type='range'; inp.min=s.min; inp.max=s.max; inp.step=s.step; inp.value=CFG[s.k];
+      const refresh=()=>{ val.textContent=fmt(CFG[s.k],s.step)+(s.unit?(' '+s.unit):''); };
+      inp.addEventListener('input',()=>{ CFG[s.k]=+inp.value; refresh(); onCfgChange(); });
+      refresh();
+      wrap.append(row,inp); grid.appendChild(wrap);
+      sliderEls[s.k]={inp,refresh};
+    });
+    sec.appendChild(grid); cont.appendChild(sec);
+  });
+}
+function syncSliders(){ SLIDERS.forEach(s=>{ const e=sliderEls[s.k]; if(e){ e.inp.value=CFG[s.k]; e.refresh(); } }); }
+
+function renderPresets(){
+  const c=document.getElementById('presets'); c.innerHTML='';
+  if(!presets.length){
+    const e=document.createElement('span'); e.className='empty';
+    e.textContent='No saved looks yet — tune the sliders, then “Save this look”.';
+    c.appendChild(e); return;
+  }
+  presets.forEach((p,i)=>{
+    const chip=document.createElement('span'); chip.className='chip';
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=p.name; nm.title='Apply this look';
+    nm.addEventListener('click',()=>applyPreset(i));
+    const del=document.createElement('button'); del.className='del'; del.textContent='✕'; del.title='Delete';
+    del.addEventListener('click',e=>{ e.stopPropagation(); presets.splice(i,1); store.set(CK_PRE,presets); renderPresets(); });
+    chip.append(nm,del); c.appendChild(chip);
+  });
+}
+function applyPreset(i){
+  CFG=Object.assign({}, DEFAULTS, sanitize(presets[i].cfg));
+  syncSliders(); onCfgChange(); toast('Loaded “'+presets[i].name+'”');
+  if(autoRollEl.checked && !rolling) rollAll();
+}
+function savePreset(){
+  let name='Look '+(presets.length+1);
+  try{ const r=prompt('Name this look:', name); if(r===null) return; name=(r.trim()||name); }catch(e){}
+  name=name.slice(0,24);
+  presets.push({name, cfg:Object.assign({},CFG)});
+  store.set(CK_PRE,presets); renderPresets(); toast('Saved “'+name+'”');
+}
+function copyCfg(){
+  const t=JSON.stringify(CFG,null,2);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast('Settings copied'),()=>fallbackCopy());
+  } else fallbackCopy();
+}
+function fallbackCopy(){
+  codeEl.focus(); codeEl.select();
+  try{ document.execCommand('copy'); toast('Settings copied'); }
+  catch(e){ toast('Select the code box to copy'); }
+}
+let toastT;
+function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1500); }
+
+document.getElementById('saveBtn').addEventListener('click',savePreset);
+document.getElementById('copyBtn').addEventListener('click',copyCfg);
+document.getElementById('resetBtn').addEventListener('click',()=>{ CFG=Object.assign({},DEFAULTS); syncSliders(); onCfgChange(); toast('Reset to defaults'); });
+document.getElementById('applyCode').addEventListener('click',()=>{
+  try{ const o=JSON.parse(codeEl.value); CFG=Object.assign({},DEFAULTS,sanitize(o)); syncSliders(); onCfgChange(); toast('Applied'); if(autoRollEl.checked&&!rolling) rollAll(); }
+  catch(e){ toast('Invalid settings text'); }
+});
+autoRollEl.addEventListener('change',()=>{ if(autoRollEl.checked && !rolling) rollAll(); });
+
+rollBtn.addEventListener('click',rollAll);
+document.getElementById('count').addEventListener('click',e=>{const n=e.target.dataset.n;if(n&&!rolling)setCount(+n);});
+
+buildDiePicker();
+buildSliders(); renderPresets(); onCfgChange();
+setCount(1);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

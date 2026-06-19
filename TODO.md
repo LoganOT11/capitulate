@@ -2,6 +2,8 @@
 
 Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer dice-battler with procedural boards, character progression, and loop-based PvP encounters.
 
+**Design decisions:** See `DESIGN.md` for the three-tier equipment system (dice → items → modifications).
+
 ---
 
 ## Phase 1: Game Engine Core
@@ -14,6 +16,8 @@ Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer
 - [x] Gold tracking on character
 - [x] `dicePool` and `itemSlots` integrated on Character
 - [x] Serialization: `toJSON()` / `fromJSON()` for ghost snapshots
+- [ ] Remove `character.damage` — damage is now per-die (see DESIGN.md §4)
+- [ ] Remove global `ItemSlots` from Character — items attach to individual dice
 - [ ] Implement stat modifiers (buffs/debuffs) with duration tracking
 - [ ] Defense/resistance stats (physical, magical)
 
@@ -36,14 +40,26 @@ Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer
 - [x] `speedMod` per die: controls tick skip (1 = every tick, 2 = every other)
 - [x] Board-scoped effects on bought dice (gold, heal)
 - [x] 8 starter dice in the dice shop catalogue
+- [ ] Add `level`, `baseDamage`, `faces[]`, `itemSlots[]`, `modifications[]` to Die (DESIGN.md §1)
+- [ ] Create `src/engine/dice/die-registry.js` with face distributions
+- [ ] Create `src/engine/dice/die-modifications.js` — Pip Convert, Face Inject, Weighted Face
+- [ ] Implement merge system: 3× same type+level → next level (DESIGN.md §1)
+- [ ] Face promotion UI on merge (pick a face to +1 pip)
+- [ ] Update DicePool with merge helpers and level tracking
 
-### 1.4 Item System
-- [x] `Item` class in `src/engine/items/item.js` — pip trigger, effect, adjacency flag
-- [x] `ItemSlots` — 2×3 grid with 4-directional adjacency
-- [x] Items trigger when ANY die rolls the matching pip
-- [x] Adjacent items chain-trigger if flagged
-- [x] 10 starter items in `item-registry.js` (damage, heal, gold, adjacency)
+### 1.4 Item System (Redesign — see DESIGN.md §2)
+- [x] `Item` class in `src/engine/items/item.js` — pip trigger, effect, adjacency flag *(legacy)*
+- [x] `ItemSlots` — 2×3 grid with 4-directional adjacency *(legacy — replaced by per-die slots)*
+- [x] Items trigger when ANY die rolls the matching pip *(legacy)*
+- [x] Adjacent items chain-trigger if flagged *(legacy)*
+- [x] 10 starter items in `item-registry.js` (damage, heal, gold, adjacency) *(legacy)*
 - [x] Item shop with 6-slot inventory, rerolling, and discount support
+- [ ] Redesign Item class: attach to specific dice, tier (1/2/3), tags, recipe ID
+- [ ] Redesign item-registry.js as 3-tier catalogue (8 T1, 8 T2, 4 T3)
+- [ ] Create `src/engine/items/item-combiner.js` — recipe lookup, combine in inventory
+- [ ] Items attach to die's item slot (1 slot per die level, max 3)
+- [ ] Items on a die are locked — combine in inventory before attaching
+- [ ] Merge flow: primary die keeps items, sacrificed dice' items return to inventory
 
 ### 1.5 Economy
 - [x] Gold currency on character
@@ -53,6 +69,9 @@ Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer
 - [x] −1 gold discount when landing exactly on a shop tile
 - [x] Potion shop: consumable (instant), permanent (stat boost), temporary (battle-limited)
 - [ ] Track temporary buff duration across battles
+- [ ] Item combine UI (inventory panel — select two items, fuse if recipe exists)
+- [ ] Die merge UI (dice panel — select primary + 2 sacrifices, pick face to promote)
+- [ ] Pip shop sells die modifications (Pip Convert 10g, Face Inject 15g, Weighted Face 12g)
 
 ---
 
@@ -89,9 +108,11 @@ Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer
 - [x] Create `src/engine/battle/battle-engine.js`
 - [x] Batch tick: all active dice roll simultaneously each tick
 - [x] Tick interval = `character.speed` seconds
-- [x] Damage formula: `baseDamage + pip + item triggers`
+- [x] Damage formula: `baseDamage + pip + item triggers` *(legacy — uses character.damage)*
 - [x] Face frequency counting for synergy effects
 - [x] Per-die speedMod (skip-tick system)
+- [ ] Update damage formula: `die.baseDamage + pip + item_bonus` (remove character.damage)
+- [ ] Wire item effects to per-die attachment instead of global ItemSlots
 - [ ] Wire battle engine to tile 0 trigger (currently a stub that gives 10 gold)
 - [ ] Battle UI: overlay/modal with HP bars, dice rolls, damage log
 - [ ] Victory/defeat resolution with rewards

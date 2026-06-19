@@ -2,9 +2,15 @@
 // A single die that can be equipped in a character's dice pool.
 // Dice are batch-rolled: all active dice roll simultaneously each tick.
 //
-// speedMod — how many ticks between rolls (1 = every tick, 2 = every other tick)
-// category — "movement" | "bought" | "combat"
-// effects  — board-only effects triggered by pip value (gold, heal, scaling)
+// Which phases a die rolls in depends on its category:
+//   movement — board only (drive step count; feed passives/items; no fighting)
+//   bought / combat — board AND battle
+// An effect's `scope` ("board" | "battle") gates which of a die's effects fire
+// in whichever phase it rolls.
+//
+// speedMod — how many ticks between rolls in battle (1 = every tick, 2 = every other)
+// category — "movement" | "bought" | "combat" (see phase participation above)
+// effects  — scoped effects [{ scope, type, pip, value }] triggered by pip
 
 class Die {
   /**
@@ -52,9 +58,19 @@ class Die {
 
   /** Get board-scoped effects that match the current pip. */
   getBoardEffects() {
+    return this._effectsForScope('board');
+  }
+
+  /** Get battle-scoped effects that match the current pip. */
+  getBattleEffects() {
+    return this._effectsForScope('battle');
+  }
+
+  /** @private — effects of a given scope matching the most recent roll. */
+  _effectsForScope(scope) {
     if (this.lastPip == null) return [];
     return this.effects.filter(
-      fx => fx.scope === 'board' && (fx.pip === this.lastPip || fx.pip === 'any')
+      fx => fx.scope === scope && (fx.pip === this.lastPip || fx.pip === 'any')
     );
   }
 

@@ -199,91 +199,57 @@ body {
   min-width: 0;
 }
 
+.dice-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dice-panel-head .section-title {
+  margin: 0;
+}
+
 .dice-count {
   color: #999;
   font-weight: 600;
 }
 
-.dice-inventory {
+.btn-add-die {
+  flex: none;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: #f9a825;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-add-die:hover {
+  background: #f57f17;
+}
+
+/* Bought-dice bar — holds the deluxe slot-machine canvas */
+.dice-bar {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(var(--dice-cols, 4), var(--chip-size, 56px));
-  grid-auto-rows: var(--chip-size, 56px);
-  gap: 6px;
-  justify-content: center;
-  align-content: center;
-  padding: 6px;
-  background: #eceff1;
-  border-radius: 8px;
-}
-
-.dice-inventory:empty::before {
-  content: "No dice stored yet";
-  grid-column: 1 / -1;
-  color: #aaa;
-  font-size: 12px;
-  text-align: center;
-  align-self: center;
-}
-
-.die-chip {
-  width: var(--chip-size, 56px);
-  height: var(--chip-size, 56px);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 4px;
-  background: #fff;
-  border: 2px solid #cfd8dc;
+  background: #1a2230;
   border-radius: 8px;
-}
-
-.die-chip.cat-movement {
-  border-color: #2e7d32;
-}
-
-.die-chip.cat-bought {
-  border-color: #f9a825;
-}
-
-.die-chip.cat-combat {
-  border-color: #c62828;
-}
-
-.die-chip-name {
-  font-size: 8px;
-  line-height: 1;
-  color: #777;
-  max-width: 100%;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.pip-face {
-  width: 56%;
-  aspect-ratio: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-}
-
-.pip-face span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pip-face span.on::after {
-  content: "";
-  width: 62%;
-  aspect-ratio: 1;
-  background: #37474f;
-  border-radius: 50%;
+#dice-bar-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;        /* letterbox — no pixel distortion */
+  image-rendering: pixelated;
+  display: block;
 }
 
 /* --- Right: equipment (top) + roll area (bottom-right corner) ------------ */

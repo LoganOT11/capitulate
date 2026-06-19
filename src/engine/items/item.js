@@ -3,7 +3,9 @@
 // Items are placed in a 2D grid (ItemSlots) and can have adjacency effects.
 //
 // pip      — the face value that triggers this item (1-6)
-// effect   — { type, value } where type is "damage" | "heal" | "gold" | "buff"
+// effects  — scoped effects [{ scope, type, value }] where scope is
+//            "board" | "battle" and type is "damage" | "heal" | "gold".
+//            Board effects fire on board rolls; battle effects fire in combat.
 // adjacent — if true, triggers adjacent items in the grid too (chain reaction)
 
 class Item {
@@ -12,22 +14,42 @@ class Item {
    * @param {string} opts.name        — display name
    * @param {string} [opts.description]
    * @param {number} opts.pip         — trigger pip (1-6)
-   * @param {object} opts.effect      — { type: string, value: number }
+   * @param {Array}  [opts.effects]   — [{ scope, type, value }]
+   * @param {object} [opts.effect]    — legacy single { type, value }; treated
+   *                                     as a battle-scoped effect
    * @param {boolean} [opts.adjacent] — trigger neighbors on activation
    */
-  constructor({ name, description = '', pip, effect, adjacent = false } = {}) {
+  constructor({ name, description = '', pip, effects = null, effect = null, adjacent = false } = {}) {
     this.name        = name;
     this.description = description;
     this.pip         = pip;
-    this.effect      = effect;
     this.adjacent    = adjacent;
+
+    if (effects) {
+      this.effects = effects;
+    } else if (effect) {
+      // Legacy: a bare effect historically only fired in battle.
+      this.effects = [{ scope: 'battle', type: effect.type, value: effect.value }];
+    } else {
+      this.effects = [];
+    }
+  }
+
+  /** Board-scoped effects (fire on board rolls). */
+  get boardEffects() {
+    return this.effects.filter(fx => fx.scope === 'board');
+  }
+
+  /** Battle-scoped effects (fire on battle ticks). */
+  get battleEffects() {
+    return this.effects.filter(fx => fx.scope === 'battle');
   }
 
   toJSON() {
     return {
       name: this.name,
       pip: this.pip,
-      effect: this.effect,
+      effects: this.effects,
       adjacent: this.adjacent,
     };
   }

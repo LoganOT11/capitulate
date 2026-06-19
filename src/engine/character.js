@@ -73,20 +73,48 @@ class Character {
   // --- Board-roll passive -------------------------------------------------
 
   /**
-   * Call after rolling the 2 movement dice on the board.
-   * Checks the archetype's passive trigger and applies stat effects.
-   * Returns { triggered, effects[] } so the caller can show feedback.
+   * Resolve a full board roll: every die's faces drive the archetype passive,
+   * each die's board-scoped effects fire, and board-scoped item effects trigger
+   * by pip. Board has no enemy, so only gold/heal effects apply (damage is
+   * skipped); battle effects are handled by BattleEngine.
+   *
+   * Accepts either:
+   *   - a rollResult { results: Die[], faceCounts } from DicePool.rollBoard(), or
+   *   - legacy (d1, d2) numbers — passive only, no die/item board effects.
+   *
+   * Returns { triggered, effects[], hits, gold, heal, itemTriggers }.
    */
-  processBoardRoll(d1, d2) {
+  processBoardRoll(arg1, arg2) {
     this.lastPassiveTriggered = false;
     this.lastPassiveEffects   = [];
 
+    const { faceCounts, results } = this._normalizeBoardRoll(arg1, arg2);
+
+    const passive = this._applyPassive(faceCounts);
+    const board   = this._applyBoardEffects(results);
+
+    return { ...passive, ...board };
+  }
+
+  /** @private — accept a rollResult object or legacy (d1, d2) numbers. */
+  _normalizeBoardRoll(arg1, arg2) {
+    if (arg1 && typeof arg1 === 'object') {
+      return { faceCounts: arg1.faceCounts, results: arg1.results || [] };
+    }
+    const faceCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    if (arg1 != null) faceCounts[arg1]++;
+    if (arg2 != null) faceCounts[arg2]++;
+    return { faceCounts, results: [] };
+  }
+
+  /** @private — fire the archetype passive over the rolled face counts. */
+  _applyPassive(faceCounts) {
     if (!this.passive || !this.passive.trigger) {
       return { triggered: false, effects: [] };
     }
 
     // How many times does the trigger fire?  (e.g. two 6s → Rogue fires twice)
-    const hits = triggerCount(this.passive.trigger, d1, d2);
+    const hits = triggerCount(this.passive.trigger, faceCounts);
     if (hits === 0) {
       return { triggered: false, effects: [] };
     }
@@ -125,6 +153,70 @@ class Character {
     this.lastPassiveEffects   = applied;
 
     return { triggered: true, effects: applied, hits };
+  }
+
+  /**
+   * @private — apply board-scoped effects from the rolled dice + equipped items.
+   * Gold is gained, heal is applied; damage has no board target and is ignored.
+   */
+  _applyBoardEffects(results) {
+    let gold = 0;
+    let heal = 0;
+    const itemTriggers = [];
+
+    for (const die of results) {
+      for (const fx of die.getBoardEffects()) {
+        if (fx.type === 'gold') gold += fx.value;
+        else if (fx.type === 'heal') heal += fx.value;
+      }
+
+      const pip = die.lastPip;
+      if (pip == null) continue;
+      const res = this._triggerBoardItems(pip, itemTriggers);
+      gold += res.gold;
+      heal += res.heal;
+    }
+
+    if (gold) this.gold += gold;
+    if (heal) this.heal(heal);
+
+    return { gold, heal, itemTriggers };
+  }
+
+  /**
+   * @private — fire board-scoped effects of items matching `pip`, chaining to
+   * neighbours when an item is adjacent:true. Mirrors BattleEngine's item
+   * resolution but board-scoped. Returns { gold, heal }.
+   */
+  _triggerBoardItems(pip, itemTriggers) {
+    let gold = 0;
+    let heal = 0;
+    const fired = new Set();
+
+    const apply = (item, row, col) => {
+      const key = `${row},${col}`;
+      if (fired.has(key)) return;
+      fired.add(key);
+      const effects = item.boardEffects;
+      if (effects.length === 0) return;
+      for (const fx of effects) {
+        if (fx.type === 'gold') gold += fx.value;
+        else if (fx.type === 'heal') heal += fx.value;
+      }
+      itemTriggers.push({ name: item.name, row, col, effects });
+    };
+
+    for (const { item, row, col } of this.itemSlots.findByPip(pip)) {
+      apply(item, row, col);
+      if (item.adjacent) {
+        for (const { row: nr, col: nc } of this.itemSlots.getAdjacent(row, col)) {
+          const neighbor = this.itemSlots.get(nr, nc);
+          if (neighbor) apply(neighbor, nr, nc);
+        }
+      }
+    }
+
+    return { gold, heal };
   }
 
   // --- Loop progression ---------------------------------------------------

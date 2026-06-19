@@ -73,38 +73,34 @@ const CHARACTER_TYPES = Object.freeze({
 });
 
 // --- Trigger evaluation ---------------------------------------------------
+//
+// Triggers operate over the face-count map of EVERY rolled die
+// ({ 1:n, 2:n, ... , 6:n }) so passives scale with the whole pool, not just
+// the 2 movement dice.
 
-/** Returns true if the passive's trigger condition is met for this roll. */
-function isTriggered(trigger, d1, d2) {
+/**
+ * How many times does this trigger fire for the given face counts?
+ *   pair     → number of matched pairs across all faces
+ *              (e.g. 3,3,5,5 → 2 pairs; 6,6,6 → 1 pair)
+ *   has_six  → count of 6s rolled
+ */
+function triggerCount(trigger, faceCounts) {
   switch (trigger) {
-    case 'pair':
-      return d1 === d2;
+    case 'pair': {
+      let pairs = 0;
+      for (let f = 1; f <= 6; f++) pairs += Math.floor((faceCounts[f] || 0) / 2);
+      return pairs;
+    }
     case 'has_six':
-      return d1 === 6 || d2 === 6;
+      return faceCounts[6] || 0;
     default:
-      return false;
+      return 0;
   }
 }
 
-/**
- * For multi-hit triggers like 'has_six', returns how many times it fires.
- * Knight/Mage pair → 1 trigger.  Rogue has_six → count of 6s rolled.
- */
-function triggerCount(trigger, d1, d2) {
-  switch (trigger) {
-    case 'pair':
-    case 'has_six':
-      // For has_six: 0, 1, or 2.  For pair: always 0 or 1.
-      let count = 0;
-      if (trigger === 'pair') {
-        return d1 === d2 ? 1 : 0;
-      }
-      if (d1 === 6) count++;
-      if (d2 === 6) count++;
-      return count;
-    default:
-      return isTriggered(trigger, d1, d2) ? 1 : 0;
-  }
+/** Returns true if the passive's trigger condition is met at least once. */
+function isTriggered(trigger, faceCounts) {
+  return triggerCount(trigger, faceCounts) > 0;
 }
 
 // Expose globally

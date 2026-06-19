@@ -2,11 +2,16 @@
 // Manages all dice a character owns, grouped by category.
 // Handles batch rolling and face-frequency counting.
 //
-// Categories:
-//   movement — exactly 2, rolled manually on the board, trigger passives
-//   bought   — collected on the board, roll alongside movement dice,
-//              board-scoped effects only. In battle: act as combat dice.
-//   combat   — unlimited, battle-only, roll on batch ticks.
+// Phase participation by category:
+//   movement — exactly 2. Roll on the BOARD only: their pips drive how many
+//              tiles the token moves, and feed passives/items. They do NOT
+//              fight in battle.
+//   bought   — roll on the board AND in battle. No movement contribution.
+//   combat   — roll on the board AND in battle. No movement contribution.
+//
+// So boardDice = every die; battleDice = bought + combat (movement excluded).
+// On a board roll all dice roll → board-scoped effects + passives + items.
+// On a battle tick the battle dice roll → battle-scoped effects + items.
 
 class DicePool {
   constructor() {
@@ -22,12 +27,12 @@ class DicePool {
     return [...this.movement, ...this.bought, ...this.combat];
   }
 
-  /** Dice that roll on the board (movement + bought). */
+  /** Dice that roll on the board — every die. */
   get boardDice() {
-    return [...this.movement, ...this.bought];
+    return this.all;
   }
 
-  /** Dice that roll in battle (bought + combat). */
+  /** Dice that fight in battle — bought + combat (movement dice don't fight). */
   get battleDice() {
     return [...this.bought, ...this.combat];
   }
@@ -65,21 +70,35 @@ class DicePool {
   // --- Rolling ------------------------------------------------------------
 
   /**
-   * Batch-roll all board dice (movement + bought).
-   * Returns { results: Die[], faceCounts: {1:n, 2:n, ... , 6:n} }
+   * Batch-roll every die for a board roll.
+   * The 2 movement dice drive the step count (movementSum); all dice (movement
+   * + bought + combat) contribute faces for passives, items and board effects.
+   *
+   * @param {Array<number>} [fixedMovement] — force the movement dice to these
+   *        pips (deterministic testing); the rest still roll randomly.
+   * @returns {{ results: Die[], faceCounts: object, movementSum: number }}
    */
-  rollBoard() {
-    const dice = this.boardDice;
+  rollBoard(fixedMovement = null) {
     const results = [];
     const faceCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    let movementSum = 0;
 
-    for (const die of dice) {
+    this.movement.forEach((die, i) => {
+      const pip = (fixedMovement && fixedMovement[i] != null)
+        ? die.rollFixed(fixedMovement[i])
+        : die.roll();
+      faceCounts[pip]++;
+      movementSum += pip;
+      results.push(die);
+    });
+
+    for (const die of [...this.bought, ...this.combat]) {
       const pip = die.roll();
       faceCounts[pip]++;
       results.push(die);
     }
 
-    return { results, faceCounts };
+    return { results, faceCounts, movementSum };
   }
 
   /**

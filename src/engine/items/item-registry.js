@@ -3,79 +3,79 @@
 // Each entry is a factory function so items are fresh instances when created.
 
 const ITEM_REGISTRY = {
-  // --- Damage items (pip-triggered) ---
+  // --- Damage items (battle-scoped: deal damage in combat) ---
   fire_sword: () => new Item({
     name: 'Fire Sword',
-    description: 'Deal +8 fire damage when a die rolls 6.',
+    description: 'Deal +8 fire damage in battle when a die rolls 6.',
     pip: 6,
-    effect: { type: 'damage', value: 8 },
+    effects: [{ scope: 'battle', type: 'damage', value: 8 }],
   }),
 
   sharp_fang: () => new Item({
     name: 'Sharp Fang',
-    description: 'Deal +3 damage when a die rolls 2.',
+    description: 'Deal +3 damage in battle when a die rolls 2.',
     pip: 2,
-    effect: { type: 'damage', value: 3 },
+    effects: [{ scope: 'battle', type: 'damage', value: 3 }],
   }),
 
   thunder_lance: () => new Item({
     name: 'Thunder Lance',
-    description: 'Deal +5 damage when a die rolls 4.',
+    description: 'Deal +5 damage in battle when a die rolls 4.',
     pip: 4,
-    effect: { type: 'damage', value: 5 },
+    effects: [{ scope: 'battle', type: 'damage', value: 5 }],
   }),
 
   shadow_blade: () => new Item({
     name: 'Shadow Blade',
-    description: 'Deal +4 damage when a die rolls 3.',
+    description: 'Deal +4 damage in battle when a die rolls 3.',
     pip: 3,
-    effect: { type: 'damage', value: 4 },
+    effects: [{ scope: 'battle', type: 'damage', value: 4 }],
   }),
 
-  // --- Heal items ---
+  // --- Heal items (battle-scoped: combat sustain) ---
   vitality_crystal: () => new Item({
     name: 'Vitality Crystal',
-    description: 'Heal 3 HP when a die rolls 1.',
+    description: 'Heal 3 HP in battle when a die rolls 1.',
     pip: 1,
-    effect: { type: 'heal', value: 3 },
+    effects: [{ scope: 'battle', type: 'heal', value: 3 }],
   }),
 
   lifebloom: () => new Item({
     name: 'Lifebloom',
-    description: 'Heal 5 HP when a die rolls 5.',
+    description: 'Heal 5 HP in battle when a die rolls 5.',
     pip: 5,
-    effect: { type: 'heal', value: 5 },
+    effects: [{ scope: 'battle', type: 'heal', value: 5 }],
   }),
 
-  // --- Gold items ---
+  // --- Gold items (board-scoped: earn gold as you move) ---
   lucky_coin: () => new Item({
     name: 'Lucky Coin',
-    description: 'Gain 2 gold when a die rolls 1.',
+    description: 'Gain 2 gold on the board when a die rolls 1.',
     pip: 1,
-    effect: { type: 'gold', value: 2 },
+    effects: [{ scope: 'board', type: 'gold', value: 2 }],
   }),
 
   merchants_ring: () => new Item({
     name: "Merchant's Ring",
-    description: 'Gain 4 gold when a die rolls 6.',
+    description: 'Gain 4 gold on the board when a die rolls 6.',
     pip: 6,
-    effect: { type: 'gold', value: 4 },
+    effects: [{ scope: 'board', type: 'gold', value: 4 }],
   }),
 
-  // --- Adjacent-trigger items ---
+  // --- Adjacent-trigger items (battle-scoped) ---
   chain_lightning: () => new Item({
     name: 'Chain Lightning',
-    description: 'Deal +3 damage when a die rolls 4. Triggers adjacent items.',
+    description: 'Deal +3 damage in battle when a die rolls 4. Triggers adjacent items.',
     pip: 4,
-    effect: { type: 'damage', value: 3 },
+    effects: [{ scope: 'battle', type: 'damage', value: 3 }],
     adjacent: true,
   }),
 
   echo_gem: () => new Item({
     name: 'Echo Gem',
-    description: 'Deal +2 damage when a die rolls 3. Triggers adjacent items.',
+    description: 'Deal +2 damage in battle when a die rolls 3. Triggers adjacent items.',
     pip: 3,
-    effect: { type: 'damage', value: 2 },
+    effects: [{ scope: 'battle', type: 'damage', value: 2 }],
     adjacent: true,
   }),
 };

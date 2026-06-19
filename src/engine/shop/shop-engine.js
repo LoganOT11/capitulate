@@ -55,7 +55,7 @@ const DICE_CATALOGUE = [
   { id: 'ember_die',       cost: 20, create: () => new Die({
     name: 'Ember Die', category: 'combat', speedMod: 1,
     effects: [
-      { scope: 'board', type: 'damage', pip: 'any', value: 2 },
+      { scope: 'battle', type: 'damage', pip: 'any', value: 2 },
     ],
   })},
   { id: 'frost_die',       cost: 20, create: () => new Die({

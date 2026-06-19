@@ -31,29 +31,6 @@ function setReadout(name, value) {
   if (el) el.textContent = String(value);
 }
 
-// Which of the 9 cells (row-major) carry a dot for each die face.
-const PIP_LAYOUT = {
-  1: [4],
-  2: [0, 8],
-  3: [0, 4, 8],
-  4: [0, 2, 6, 8],
-  5: [0, 2, 4, 6, 8],
-  6: [0, 2, 3, 5, 6, 8],
-};
-
-/** Build a small 3×3 pip-face element for a die value (1–6). */
-function makePipFace(value) {
-  const face = document.createElement('div');
-  face.className = 'pip-face';
-  const on = new Set(PIP_LAYOUT[value] || []);
-  for (let i = 0; i < 9; i++) {
-    const cell = document.createElement('span');
-    if (on.has(i)) cell.className = 'on';
-    face.appendChild(cell);
-  }
-  return face;
-}
-
 // Vertical gap between the board and the dice panel (matches CSS gap).
 const CENTER_GAP = 12;
 
@@ -103,9 +80,11 @@ class BoardScene extends Phaser.Scene {
 
     // --- Systems ----------------------------------------------------------
     this.character = new Character({ name: 'Hero', type: 'knight' });
-    // Seed the two movement dice so the dice inventory reflects what rolls.
+    // Two movement dice — they live in the centre canvas and drive the steps.
     this.character.dicePool.addMovement(new Die({ name: 'Movement', category: 'movement' }));
     this.character.dicePool.addMovement(new Die({ name: 'Movement', category: 'movement' }));
+    // Start with one bought die in the bar (harness for the bar animation).
+    this.character.dicePool.addBought(new Die({ name: 'Bought', category: 'bought' }));
     this.shop      = new ShopEngine();
     this.gameState = 'board';
 
@@ -135,16 +114,12 @@ class BoardScene extends Phaser.Scene {
       .addEventListener('click', () => this.closeShop());
     document.getElementById('shop-toggle-btn')
       .addEventListener('click', () => this.toggleShopVisibility());
+    document.getElementById('add-die-btn')
+      .addEventListener('click', () => this.addBoughtDie());
 
     // Size the board + dice panel to the viewport, and re-fit on resize.
     fitLayout();
     window.addEventListener('resize', fitLayout);
-
-    // Re-size dice chips whenever the inventory box is resized by the user.
-    const diceBox = document.getElementById('dice-inventory');
-    if (diceBox && typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(() => this.layoutDiceInventory()).observe(diceBox);
-    }
   }
 
   // --- Board rendering ----------------------------------------------------
@@ -177,12 +152,23 @@ class BoardScene extends Phaser.Scene {
   }
 
   setupDice() {
+    // Centre canvas — the physics movement-dice animation. Two cubes that lift,
+    // tumble, bounce and settle, then glide home. The face left up is the result.
     const canvas = document.getElementById('dice-canvas');
-    this.diceRoller = window.PixelDice({
+    this.diceRoller = window.PixelDicePhysics({
       canvas,
       count: 2,
-      duration: 1500,
     });
+
+    // Dice bar — bought dice only, via the deluxe slot-machine renderer.
+    const barCanvas = document.getElementById('dice-bar-canvas');
+    if (barCanvas && window.PixelDiceDeluxe) {
+      this.barRoller = window.PixelDiceDeluxe({
+        canvas: barCanvas,
+        count: this.character.dicePool.bought.length,
+        theme: 'gold',
+      });
+    }
   }
 
   // --- Tile highlight -----------------------------------------------------
@@ -206,21 +192,40 @@ class BoardScene extends Phaser.Scene {
   // --- Dice rolling & movement --------------------------------------------
 
   roll(d1, d2) {
-    if (this.rolling || this.gameState !== 'board') return;
+    // Guard against re-rolling while a turn is resolving OR while the centre
+    // dice are still gliding home from the previous roll.
+    if (this.rolling || this.diceRoller.isRolling() || this.gameState !== 'board') return;
     this.rolling = true;
-    d1 = d1 != null ? d1 : Phaser.Math.Between(1, 6);
-    d2 = d2 != null ? d2 : Phaser.Math.Between(1, 6);
-    this.lastRoll = [d1, d2];
-    this.preMovePosition = this.position;
-
-    // Highlight the final destination tile immediately.
-    const finalDest = (this.position + d1 + d2) % TILE_COUNT;
-    this.highlightTile(finalDest);
     this.syncDom();
 
-    this.diceRoller.roll([d1, d2], () => {
-      this.character.processBoardRoll(d1, d2);
-      this.stepMove(d1 + d2);
+    // rollWith(d1, d2) forces the movement values (deterministic test hook);
+    // a plain roll lets the physics decide which faces land.
+    const forced = (d1 != null && d2 != null) ? [d1, d2] : null;
+
+    // Start both animations together: the centre cubes begin their tumble and
+    // the dice bar begins its lottery spin.
+    if (this.barRoller && this.barRoller.getCount() > 0) this.barRoller.spin();
+
+    this.diceRoller.roll(forced, {
+      // Fires once the centre dice have stopped moving and begin returning home.
+      // This is the only moment the bar's lottery spin is allowed to stop.
+      onReturn: (movePips) => {
+        // Resolve the real roll using the settled movement faces. rollBoard fixes
+        // the movement dice to these and rolls bought/combat for passives/items.
+        const rollResult = this.character.dicePool.rollBoard(movePips);
+        const boughtPips = this.character.dicePool.bought.map(die => die.lastPip);
+
+        this.lastRoll = this.character.dicePool.movement.map(die => die.lastPip);
+        this.preMovePosition = this.position;
+        this.highlightTile((this.position + rollResult.movementSum) % TILE_COUNT);
+
+        // Land the bar on the resolved bought values now that the centre settled.
+        if (this.barRoller && this.barRoller.isRolling()) this.barRoller.stop(boughtPips);
+
+        this.character.processBoardRoll(rollResult);
+        this.stepMove(rollResult.movementSum);
+        this.syncDom();
+      },
     });
   }
 
@@ -456,7 +461,7 @@ class BoardScene extends Phaser.Scene {
 
   renderInventories() {
     this.renderItemInventory();
-    this.renderDiceInventory();
+    this.syncBarDice();
   }
 
   /** Render the 2×3 item grid, showing equipped items and empty slots. */
@@ -485,59 +490,19 @@ class BoardScene extends Phaser.Scene {
     }
   }
 
-  /** Render every owned die as a pip-face chip, then size them to fit. */
-  renderDiceInventory() {
-    const container = document.getElementById('dice-inventory');
-    if (!container) return;
-    const dice = this.character.dicePool.all;
-    container.innerHTML = '';
-
-    for (const die of dice) {
-      const chip = document.createElement('div');
-      chip.className = 'die-chip cat-' + die.category;
-      chip.title = `${die.name} (${die.category})`;
-      chip.appendChild(makePipFace(die.lastPip || 6));
-      const name = document.createElement('span');
-      name.className = 'die-chip-name';
-      name.textContent = die.name;
-      chip.appendChild(name);
-      container.appendChild(chip);
-    }
-
+  /** Sync the dice bar (bought dice only) count + readout. */
+  syncBarDice() {
+    const n = this.character.dicePool.bought.length;
+    if (this.barRoller) this.barRoller.setCount(n);
     const countEl = document.getElementById('dice-count');
-    if (countEl) countEl.textContent = dice.length ? `(${dice.length})` : '';
-
-    this.layoutDiceInventory();
+    if (countEl) countEl.textContent = n ? `(${n})` : '';
   }
 
-  /**
-   * Pick the column count and chip size that best fills the (resizable) box
-   * for the current dice count, so dice stay visible and shrink as more
-   * are added.
-   */
-  layoutDiceInventory() {
-    const container = document.getElementById('dice-inventory');
-    if (!container) return;
-    const n = container.childElementCount;
-    if (n === 0) return;
-
-    const gap = 6;
-    const cw = Math.max(0, container.clientWidth - 16);   // minus 8px padding ×2
-    const ch = Math.max(0, container.clientHeight - 16);
-
-    let bestCols = 1;
-    let bestSize = 0;
-    for (let cols = 1; cols <= n; cols++) {
-      const rows = Math.ceil(n / cols);
-      const w = (cw - gap * (cols - 1)) / cols;
-      const h = (ch - gap * (rows - 1)) / rows;
-      const size = Math.min(w, h);
-      if (size > bestSize) { bestSize = size; bestCols = cols; }
-    }
-
-    bestSize = Math.max(28, Math.min(bestSize, 120)); // clamp for legibility
-    container.style.setProperty('--dice-cols', bestCols);
-    container.style.setProperty('--chip-size', bestSize + 'px');
+  /** Add a bought die to the bar (test button for the bar animation). */
+  addBoughtDie() {
+    if (this.rolling) return;
+    this.character.dicePool.addBought(new Die({ name: 'Bought', category: 'bought' }));
+    this.syncBarDice();
   }
 
   // --- API ----------------------------------------------------------------

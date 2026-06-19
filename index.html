@@ -35,7 +35,7 @@
 
           <!-- Dice roll animation, centred over the board -->
           <div id="board-overlay">
-            <canvas id="dice-canvas" width="320" height="160" aria-hidden="true"></canvas>
+            <canvas id="dice-canvas" width="480" height="360" aria-hidden="true"></canvas>
           </div>
 
           <!-- Shop appears over the board with a hide/view toggle -->
@@ -55,8 +55,13 @@
         </div>
 
         <section id="dice-panel" class="panel">
-          <h2 class="section-title">Dice <span class="dice-count" id="dice-count"></span></h2>
-          <div id="dice-inventory" class="dice-inventory"></div>
+          <div class="dice-panel-head">
+            <h2 class="section-title">Dice <span class="dice-count" id="dice-count"></span></h2>
+            <button id="add-die-btn" class="btn-add-die" type="button">＋ Add Die</button>
+          </div>
+          <div id="dice-bar" class="dice-bar">
+            <canvas id="dice-bar-canvas" width="960" height="160" aria-hidden="true"></canvas>
+          </div>
         </section>
       </div>
 
@@ -97,6 +102,8 @@
     <script src="/src/engine/shop/shop-engine.js"></script>
     <!-- game -->
     <script src="/src/pixel-dice.js"></script>
+    <script src="/src/pixel-dice-physics.js"></script>
+    <script src="/src/pixel-dice-deluxe.js"></script>
     <script src="/src/main.js"></script>
   </body>
 </html>

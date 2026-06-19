@@ -93,25 +93,29 @@ class BattleEngine {
    * @private
    */
   _resolveDice(attacker, defender, rollResult) {
-    let totalDamage = 0;
-    let totalHeal   = 0;
-    let totalGold   = 0;
-    const itemTriggers = [];
+    // Single accumulator threaded through item resolution so item procs
+    // actually contribute to the totals (previously written to a throwaway).
+    const acc = { totalDamage: 0, totalHeal: 0, totalGold: 0, itemTriggers: [] };
 
     for (const die of rollResult.results) {
       const pip = die.lastPip;
 
       // Base damage: character.damage + pip
-      totalDamage += attacker.damage + pip;
+      acc.totalDamage += attacker.damage + pip;
+
+      // Die's own battle-scoped effects
+      for (const fx of die.getBattleEffects()) {
+        if (fx.type === 'damage') acc.totalDamage += fx.value;
+        else if (fx.type === 'heal') acc.totalHeal += fx.value;
+        else if (fx.type === 'gold') acc.totalGold += fx.value;
+      }
 
       // Item triggers for this pip
       const matchedItems = attacker.itemSlots.findByPip(pip);
       const triggeredSet = new Set(); // track by grid position to avoid double-fire
 
       for (const { item, row, col } of matchedItems) {
-        this._triggerItem(item, row, col, attacker, triggeredSet, {
-          itemTriggers, totalDamage, totalHeal, totalGold,
-        });
+        this._triggerItem(item, row, col, attacker, triggeredSet, acc);
 
         // Chain to adjacent items if this item has adjacent:true
         if (item.adjacent) {
@@ -119,34 +123,30 @@ class BattleEngine {
           for (const { row: nr, col: nc } of neighbors) {
             const neighbor = attacker.itemSlots.get(nr, nc);
             if (neighbor && !triggeredSet.has(`${nr},${nc}`)) {
-              this._triggerItem(neighbor, nr, nc, attacker, triggeredSet, {
-                itemTriggers, totalDamage, totalHeal, totalGold,
-              });
+              this._triggerItem(neighbor, nr, nc, attacker, triggeredSet, acc);
             }
           }
         }
       }
     }
 
-    // Gold scaling: for each face that appeared N times, gain N × gold-per-trigger
-    // (Gold items already triggered above, but face-frequency bonus is separate)
-    // This is the "for every die that shares the same face" mechanic.
-    // We'll accumulate gold from item triggers separately.
-
     // Apply damage to defender
-    if (totalDamage > 0) {
-      defender.takeDamage(totalDamage);
+    if (acc.totalDamage > 0) {
+      defender.takeDamage(acc.totalDamage);
     }
-    // Apply heal to attacker
-    if (totalHeal > 0) {
-      attacker.heal(totalHeal);
+    // Apply heal + gold to attacker
+    if (acc.totalHeal > 0) {
+      attacker.heal(acc.totalHeal);
+    }
+    if (acc.totalGold > 0) {
+      attacker.gold = (attacker.gold || 0) + acc.totalGold;
     }
 
-    return { totalDamage, totalHeal, totalGold, itemTriggers };
+    return acc;
   }
 
   /**
-   * Trigger a single item's effect.
+   * Trigger a single item's battle-scoped effects.
    * @private
    */
   _triggerItem(item, row, col, attacker, triggeredSet, accum) {
@@ -154,19 +154,22 @@ class BattleEngine {
     if (triggeredSet.has(key)) return;
     triggeredSet.add(key);
 
-    switch (item.effect.type) {
-      case 'damage':
-        accum.totalDamage += item.effect.value;
-        break;
-      case 'heal':
-        accum.totalHeal += item.effect.value;
-        break;
-      case 'gold':
-        accum.totalGold += item.effect.value;
-        break;
-      // future: buff, debuff, etc.
+    const effects = item.battleEffects;
+    for (const fx of effects) {
+      switch (fx.type) {
+        case 'damage':
+          accum.totalDamage += fx.value;
+          break;
+        case 'heal':
+          accum.totalHeal += fx.value;
+          break;
+        case 'gold':
+          accum.totalGold += fx.value;
+          break;
+        // future: buff, debuff, etc.
+      }
     }
-    accum.itemTriggers.push({ name: item.name, row, col, effect: item.effect });
+    accum.itemTriggers.push({ name: item.name, row, col, effects });
   }
 
   /** Tick interval in milliseconds (character speed in seconds → ms). */
