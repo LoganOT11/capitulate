@@ -23,8 +23,10 @@ server.js               # Zero-dependency Node.js static file server (port 8080)
 playwright.config.js    # Playwright config — Firefox only, imports from playwright/test
 src/
   main.js               # Phaser BoardScene: board, shops, movement, tile triggers
-  pixel-dice.js         # Standalone pixel-art dice renderer (no deps, canvas-based)
   style.css             # Layout, shop panel, readout styles
+  render/               # Canvas dice renderers used by the game (decoupled from Phaser)
+    pixel-dice-physics.js  # Centre board cubes: tumble + bounce physics (window.PixelDicePhysics)
+    pixel-dice-deluxe.js   # Owned-dice bar: slot-machine spinner (window.PixelDiceDeluxe)
   engine/
     character.js         # Character class: stats, HP, dice pool, item slots, gold
     character-types.js   # Knight/Rogue/Mage/Cleric archetypes + passive triggers
@@ -39,6 +41,15 @@ src/
       battle-engine.js   # Real-time batch combat engine (tick-based)
     shop/
       shop-engine.js     # Shop system: 3 types, 6-slot inventory, rerolling, discounts
+demos/                  # Standalone dice prototypes — NOT part of the game
+  pixel-dice.js          # Low-allocation reference engine (window.PixelDice)
+  dice-demo.html         # Demo for pixel-dice.js — roll 1–100 dice
+  pixel-dice-fixed.html  # Earliest prototype the renderers grew from
+  pixel-dice-deluxe.html # Slot-machine prototype (source of pixel-dice-deluxe.js)
+  pixel-dice-roll.html   # Physics-tumble prototype (source of pixel-dice-physics.js)
+docs/
+  DESIGN.md             # Three-tier equipment system design (dice → items → mods)
+  DICE_PERFORMANCE.md   # Dice RAM investigation & optimization notes
 tests/
   game.spec.js          # Playwright tests using window.__game API
 scripts/
@@ -52,9 +63,10 @@ scripts/
 - **Phaser is loaded from CDN** (`cdn.jsdelivr.net/npm/phaser@4.1.0`), not bundled locally.
 - **No local `npm install`** — Playwright resolves from the globally-installed `@playwright/cli` via `NODE_PATH` override in `scripts/run-tests.js`. Tests import `playwright/test` (not `@playwright/test`).
 - **Board geometry**: 40 tiles on an 11×11 grid. Tile 0 (GO) is bottom-right, movement is counter-clockwise.
-- **Dice are decoupled** from Phaser: `PixelDice` renders into its own `<canvas>` element in the UI panel.
+- **Dice renderers are decoupled** from Phaser (`src/render/`, canvas-based, attach to `window`): `PixelDicePhysics` (centre board `#dice-canvas`) tumbles two cubes whose settled top face is the roll result; `PixelDiceDeluxe` (`#dice-bar-canvas`) spins the owned-dice bar. Both stop their `requestAnimationFrame` loop when idle and draw a single rest frame.
+- **Physics dice settle, never freeze.** A roll runs lift → hover → phys → hold → tiltOut. `restDie()` settles a die using a tolerant floor-proximity test (not penetration, which flickers `onFloor` and stalls), plus a "stuck" fallback for a near-motionless die. `PHYS_MAX` is a generous safety cap only — the phys phase ends as soon as the dice settle, so it is reached only by a die genuinely still bouncing (which then finishes naturally rather than freezing mid-air). Tune feel via `opts.cfg`.
 - **No build step** — plain browser JS, no modules/bundlers. All engine classes attach to `window`.
-- **Script load order matters** in `index.html` — dependencies (die, dice-pool, item) load before consumers (character, main).
+- **Script load order matters** in `index.html` — dependencies (die, dice-pool, item, render/) load before consumers (character, main).
 
 ## Character System
 
@@ -151,9 +163,9 @@ DOM readout via `data-testid`: `die-1`, `die-2`, `sum`, `position`, `rolling`, `
 A single-page, no-scroll layout (`#app` fills `100vh`) with the board centred and panels on the edges. `fitLayout()` (on load + window resize) makes the board a square that fits beside the side panels and matches the dice panel to the board's width.
 
 - **Left** (`#char-panel`) — full-height character window: name, archetype badge, ability name + description, and a vertical stat list.
-- **Centre** (`#center-col`) — the Phaser board (held at native size in `#board`, CSS-`transform: scale()`-d from the top-left to fill the JS-sized `#board-stage`), with the horizontal **dice-storage panel** (`#dice-panel`) directly beneath it, width-matched to the board.
-- **Right** (`#right-col`) — `#equip-panel` (6 equipment slots, `item-slot-{row}-{col}`) on top; `#roll-area` at the bottom-right corner holds the dice animation `<canvas>`, roll status, and the roll button.
-- **Dice inventory** — each owned die renders as a pip-face chip; `layoutDiceInventory()` picks the column count + chip size that best fills the panel for the current die count (driven by a `ResizeObserver`), so dice stay visible and shrink as more are added.
+- **Centre** (`#center-col`) — the Phaser board (held at native size in `#board`, CSS-`transform: scale()`-d from the top-left to fill the JS-sized `#board-stage`), with the centre dice tumble animation (`#dice-canvas`, `PixelDicePhysics`) overlaid via `#board-overlay`, and the horizontal **dice-storage panel** (`#dice-panel`) directly beneath it, width-matched to the board.
+- **Right** (`#right-col`) — `#equip-panel` (6 equipment slots, `item-slot-{row}-{col}`) on top; `#roll-area` at the bottom-right corner holds the roll-status readout and the roll button.
+- **Dice bar** — owned (bought) dice render on `#dice-bar-canvas` via `PixelDiceDeluxe` (`src/render/pixel-dice-deluxe.js`), a slot-machine spinner that lands on the rolled faces; "＋ Add Die" adds a die to the bar.
 - **Shop overlay** — `#shop-panel` floats over the board (inside `#board-stage`). `#shop-toggle-btn` toggles a `collapsed` class (Hide ⇄ View) that hides the shop body so the board behind it is visible.
 
 ## Coding Conventions

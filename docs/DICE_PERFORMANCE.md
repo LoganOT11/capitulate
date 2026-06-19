@@ -1,9 +1,11 @@
 # Pixel dice — RAM investigation & optimization
 
-The dice animation in `pixel-dice-fixed.html` was extracted into a reusable,
-low-allocation engine (`src/pixel-dice.js`) and wired into the game. This note
-explains where its memory goes, what was changed, and how to push the dice count
-as high as possible while keeping RAM flat.
+The dice animation in `demos/pixel-dice-fixed.html` was extracted into a
+reusable, low-allocation engine (`demos/pixel-dice.js`), showcased by
+`demos/dice-demo.html`. This note explains where its memory goes, what was
+changed, and how to push the dice count as high as possible while keeping RAM
+flat. (The in-game board uses the separate physics renderer in `src/render/`;
+this engine powers the demos.)
 
 ## What "RAM" means for a canvas dice renderer
 
@@ -56,7 +58,7 @@ Takeaways:
   of idle churn at 1 die). The optimized engine stops the RAF loop when not
   rolling and renders a single frame to settle.
 
-## What changed (`src/pixel-dice.js`)
+## What changed (`demos/pixel-dice.js`)
 
 The motion is visually identical; the math was refactored, not altered (a 20k-
 sample numeric check confirms the transform matches the original to ~1e-15).

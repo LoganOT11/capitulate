@@ -3,7 +3,7 @@
  *
  *  Exposes a global factory:  window.PixelDice({ canvas, ... }) -> roller
  *
- *  Design goals (see DICE_PERFORMANCE.md):
+ *  Design goals (see docs/DICE_PERFORMANCE.md):
  *   - ONE low-res offscreen buffer is scaled up with `image-rendering:pixelated`.
  *     Canvas memory is fixed by the canvas size, NOT by the number of dice.
  *   - The hot render path performs ~zero per-frame heap allocation: all math

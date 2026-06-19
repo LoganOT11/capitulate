@@ -6,25 +6,35 @@ with [Playwright](https://playwright.dev/) (Firefox).
 ## What's here
 
 - A 40-tile board (4 corners + 9 tiles per side) rendered on a WebGL canvas.
-- Two dice rendered as a pixel-art 3D tumble animation (`src/pixel-dice.js`,
-  integrated from `pixel-dice-fixed.html`). Rolling tumbles the dice, they settle
-  on the rolled values, then the token moves.
+- Two dice rendered as a pixel-art physics tumble animation
+  (`src/render/pixel-dice-physics.js`): the dice lift, spin, drop and bounce off
+  the floor/walls, settle on the face left pointing up, then glide home and the
+  token moves. A second slot-machine renderer (`src/render/pixel-dice-deluxe.js`)
+  drives the owned-dice bar.
 - A token sprite that hops tile-by-tile around the board by the dice sum and
   wraps at tile 40.
 - A live readout panel (`data-testid` elements) and a `window.__game` API so the
   canvas-based game is fully inspectable from Playwright.
 
-## Dice animation
+## Dice renderers
 
-`src/pixel-dice.js` is a standalone, dependency-free, low-allocation dice engine
-(`window.PixelDice({ canvas, ... })`). It draws all dice into one shared low-res
-buffer scaled up with `image-rendering: pixelated`, so canvas memory is fixed
-regardless of dice count, and it stops rendering entirely when idle.
+The board uses two canvas dice renderers, both dependency-free and idle-stopping
+(the `requestAnimationFrame` loop only runs while a roll is in flight):
 
-- `dice-demo.html` — standalone demo; roll 1–100 dice (`npm start`, then open
-  `/dice-demo.html`).
-- `DICE_PERFORMANCE.md` — RAM investigation, the optimizations applied, and
-  before/after measurements.
+- `src/render/pixel-dice-physics.js` (`window.PixelDicePhysics`) — the centre
+  board cubes that genuinely tumble and bounce; the face left up is the result.
+- `src/render/pixel-dice-deluxe.js` (`window.PixelDiceDeluxe`) — the slot-machine
+  spinner for the owned-dice bar.
+
+Standalone prototypes and the low-allocation reference engine live in `demos/`:
+
+- `demos/pixel-dice.js` (`window.PixelDice`) — a low-allocation engine that draws
+  all dice into one shared low-res buffer (fixed canvas memory regardless of dice
+  count). Showcased by `demos/dice-demo.html` (roll 1–100 dice: `npm start`, then
+  open `/demos/dice-demo.html`).
+- `demos/pixel-dice-fixed.html`, `demos/pixel-dice-deluxe.html`,
+  `demos/pixel-dice-roll.html` — earlier prototypes the renderers grew from.
+- `docs/DICE_PERFORMANCE.md` — RAM investigation, optimizations, before/after.
 - `scripts/measure-dice-ram.js` — the measurement harness (Chromium headless).
 
 ## No install required

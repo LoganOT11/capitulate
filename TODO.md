@@ -2,7 +2,7 @@
 
 Transform Capitulate from a Monopoly board demo into an asynchronous multiplayer dice-battler with procedural boards, character progression, and loop-based PvP encounters.
 
-**Design decisions:** See `DESIGN.md` for the three-tier equipment system (dice → items → modifications).
+**Design decisions:** See `docs/DESIGN.md` for the three-tier equipment system (dice → items → modifications).
 
 ---
 

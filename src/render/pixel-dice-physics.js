@@ -118,11 +118,11 @@
 
   // ---------- world + physics constants ----------
   const WX = 2.55, WZ = 2.55, APEX = 3.0, BOX_H = 3.4;
-  const GRAV = [0, -23, 0];
+  const GRAV = [0, -27, 0];
   const TOP = { yaw: 0, pitch: Math.PI / 2 }, ISO = { yaw: Math.PI / 4, pitch: 0.585 };
   const invM = 1, INERTIA = (2 / 3) * HS * HS, invI = 1 / INERTIA;
-  const E_FLOOR = 0.45, E_WALL = 0.66, MU = 0.5, BOUNCE_MIN = 1.8, BOUNCE_GAIN = 0.8, MAXB = 7;
-  const RIGHT_RATE = 11, RIGHT_DAMP = 0.55;
+  const E_FLOOR = 0.32, E_WALL = 0.42, MU = 0.5, BOUNCE_MIN = 2.4, BOUNCE_GAIN = 0.5, MAXB = 3;
+  const RIGHT_RATE = 14, RIGHT_DAMP = 0.55;
   const PLANES = [
     { n: [-1, 0, 0], off: -WX, e: E_WALL },
     { n: [1, 0, 0], off: -WX, e: E_WALL },
@@ -130,7 +130,7 @@
     { n: [0, 0, 1], off: -WZ, e: E_WALL },
   ];
   const E_DIE = 0.5;
-  const V_REST = 0.42, W_REST = 1.0, CALM_T = 0.18;
+  const V_REST = 0.42, W_REST = 1.0, CALM_T = 0.16, STUCK_T = 0.45;
 
   const smooth = t => t * t * (3 - 2 * t);
   const easeOut = t => 1 - Math.pow(1 - t, 3);
@@ -240,7 +240,7 @@
     if (d.settled) return;
     d.onFloor = false;
     d.v = add(d.v, mul(GRAV, dt));
-    d.v = mul(d.v, 0.999); d.w = mul(d.w, 0.995);
+    d.v = mul(d.v, 0.995); d.w = mul(d.w, 0.985);
     d.p = add(d.p, mul(d.v, dt));
     d.q = qintegrate(d.q, d.w, dt);
     floorResolve(d);
@@ -264,9 +264,23 @@
   }
   function restDie(d, frameDt) {
     if (d.settled) return;
-    let up = -2; for (const f of FACEDEF) { const y = qrot(d.q, f.n)[1]; if (y > up) up = y; }
-    if (d.onFloor && len(d.v) < V_REST && len(d.w) < W_REST && up > 0.985) d.calm += frameDt; else d.calm = 0;
-    if (d.calm > CALM_T) { d.settled = true; d.v = [0, 0, 0]; d.w = [0, 0, 0]; d.result = topFace(d.q); }
+    // Tolerant ground test: a die at rest sits with its lowest vertex at ~0 and
+    // may register no floor penetration on a given frame, so `onFloor` flickers
+    // off and the calm timer keeps resetting — the die stops moving but never
+    // settles. Test proximity to the floor instead of penetration.
+    let minY = 1e9, up = -2;
+    for (const lv of VERT) { const wy = d.p[1] + qrot(d.q, lv)[1]; if (wy < minY) minY = wy; }
+    for (const f of FACEDEF) { const y = qrot(d.q, f.n)[1]; if (y > up) up = y; }
+    const grounded = minY < 0.03, v = len(d.v), w = len(d.w);
+    // Clean rest: grounded, slow, and lying flat — settle promptly.
+    if (grounded && v < V_REST && w < W_REST && up > 0.985) d.calm += frameDt; else d.calm = 0;
+    // Stuck fallback: near-motionless but not perfectly flat (wedged on an edge
+    // or against a wall). Guarantees the phys phase ends instead of running out
+    // to PHYS_MAX and freezing the dice mid-bounce.
+    if (grounded && v < V_REST * 0.6 && w < W_REST * 0.6) d.stuck += frameDt; else d.stuck = 0;
+    if (d.calm > CALM_T || d.stuck > STUCK_T) {
+      d.settled = true; d.v = [0, 0, 0]; d.w = [0, 0, 0]; d.result = topFace(d.q);
+    }
   }
 
   function hull2(pts) {
@@ -277,9 +291,13 @@
     lo.pop(); up.pop(); return lo.concat(up);
   }
 
-  // Default phase timings (ms). Snappier than the standalone tuner so an
-  // in-game roll resolves quickly; override via opts.cfg.
-  const DEFAULTS = { LIFT: 420, HOVER: 360, HOLD: 240, TILT_OUT: 460, PHYS_MAX: 2600 };
+  // Default phase timings (ms). The fixed phases are snappier than the standalone
+  // tuner so an in-game roll resolves quickly. PHYS_MAX is only a safety cap: the
+  // phys phase ends the instant the dice settle (reliably fast via restDie's calm
+  // /stuck timers), so the cap is kept generous and is reached only by a die that
+  // is genuinely still bouncing — which must finish naturally, never be frozen
+  // mid-air. Override any of these via opts.cfg.
+  const DEFAULTS = { LIFT: 300, HOVER: 200, HOLD: 150, TILT_OUT: 320, PHYS_MAX: 3000 };
 
   // ---------- instance factory ----------
   global.PixelDicePhysics = function createPhysicsDice(opts) {
@@ -336,7 +354,7 @@
       const r = 1 + Math.floor(Math.random() * 6);
       return {
         p: home.slice(), v: [0, 0, 0], q: squareUp(qfromTo(NORMAL_OF[r], [0, 1, 0])), w: [0, 0, 0],
-        result: r, onFloor: true, calm: 1, settled: true, axis: [0, 1, 0], spin: 0, bounces: 0,
+        result: r, onFloor: true, calm: 1, stuck: 0, settled: true, axis: [0, 1, 0], spin: 0, bounces: 0,
         home: home.slice(), p0: home.slice(), q0: [0, 0, 0, 1], qT: [0, 0, 0, 1]
       };
     }
@@ -367,7 +385,7 @@
         d.axis = norm(d.axis);
         d.spin = 13 + Math.random() * 5;
         d.q0 = d.q.slice();
-        d.settled = false; d.onFloor = false; d.calm = 0; d.bounces = 0;
+        d.settled = false; d.onFloor = false; d.calm = 0; d.stuck = 0; d.bounces = 0;
       }
       phase = 'lift'; pt = 0; physClock = 0;
       ensureLoop();

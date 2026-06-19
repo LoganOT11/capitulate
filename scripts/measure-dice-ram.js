@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /* Measures JS-heap usage of the dice renderers in Chromium (headless shell).
  *
- * Compares the original prototype (pixel-dice-fixed.html) against the optimized
- * engine (dice-demo.html / src/pixel-dice.js) at several dice counts, reporting:
+ * Compares the original prototype (demos/pixel-dice-fixed.html) against the
+ * optimized engine (demos/dice-demo.html / demos/pixel-dice.js) at several dice
+ * counts, reporting:
  *   retained  - usedJSHeapSize after forced GC, at rest  (steady footprint)
  *   idle dlt  - heap max-min over ~1.2s while NOT rolling (idle churn)
  *   roll peak - heap growth above retained during a roll  (alloc pressure)
@@ -91,8 +92,8 @@ async function measure(page, kind, count) {
   });
 
   const cases = [
-    { kind: 'original', file: '/pixel-dice-fixed.html', counts: [1, 6, 20] },
-    { kind: 'optimized', file: '/dice-demo.html', counts: [1, 6, 20, 50, 100] },
+    { kind: 'original', file: '/demos/pixel-dice-fixed.html', counts: [1, 6, 20] },
+    { kind: 'optimized', file: '/demos/dice-demo.html', counts: [1, 6, 20, 50, 100] },
   ];
 
   const rows = [];
