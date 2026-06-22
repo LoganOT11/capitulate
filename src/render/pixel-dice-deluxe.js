@@ -14,8 +14,7 @@
  *    bar.setCount(3);
  *    bar.roll([4, 2, 6], onDone);   // animate to these faces
  * =========================================================== */
-(function () {
-  const PIXEL = 4;
+(function (root) {
   const ORDER = [1, 2, 3, 4, 5, 6];
   const faceForSlot = k => ORDER[((k % 6) + 6) % 6];
   const mod6 = x => ((x % 6) + 6) % 6;
@@ -152,8 +151,26 @@
     return set;
   }
 
+  // ---------- shared edge-vignette cache (per face size) ----------
+  // The reel's top/bottom darkening is identical for every die of a given size,
+  // so bake it once and blit it at the right opacity instead of allocating a
+  // fresh gradient per die per frame.
+  const vignetteCache = {};
+  function getVignette(FS) {
+    if (vignetteCache[FS]) return vignetteCache[FS];
+    const c = document.createElement('canvas'); c.width = FS; c.height = FS;
+    const g = c.getContext('2d');
+    const og = g.createLinearGradient(0, 0, 0, FS);
+    og.addColorStop(0, 'rgba(6,4,8,1)');
+    og.addColorStop(0.34, 'rgba(6,4,8,0)');
+    og.addColorStop(0.66, 'rgba(6,4,8,0)');
+    og.addColorStop(1, 'rgba(6,4,8,1)');
+    g.fillStyle = og; g.fillRect(0, 0, FS, FS);
+    vignetteCache[FS] = c; return c;
+  }
+
   const DEFAULTS = {
-    dur: 1100, stagger: 90, rate: 0.018, minSpins: 5,
+    dur: 1600, stagger: 160, rate: 0.018, minSpins: 5,
     accel: 3.3, settle: 0.8, bounceAmp: 0.5, bounceCyc: 2.8, squash: 0, blurFull: 1.2,
   };
   const TIERS = [16, 24, 32, 48, 64, 90];
@@ -169,51 +186,139 @@
   // ---------- instance factory ----------
   function PixelDiceDeluxe(opts) {
     const canvas = opts.canvas;
+    const PIXEL = Math.max(1, (opts.pixel | 0) || 4);   // buffer downscale (chunkiness)
     const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
-    const BW = canvas.width / PIXEL, BH = canvas.height / PIXEL;
+    let BW = Math.max(1, Math.round(canvas.width / PIXEL));
+    let BH = Math.max(1, Math.round(canvas.height / PIXEL));
     const buf = document.createElement('canvas'); buf.width = BW; buf.height = BH;
-    const b = buf.getContext('2d'); b.imageSmoothingEnabled = false;
+    let b = buf.getContext('2d'); b.imageSmoothingEnabled = false;
+    // Static background (flat fill + diagonal hatch) is identical every frame, so
+    // bake it once per size and blit it, instead of re-stroking ~60 lines/frame.
+    const bgCanvas = document.createElement('canvas');
+    const bgCtx = bgCanvas.getContext('2d');
 
     const cfg = Object.assign({}, DEFAULTS, opts.cfg || {});
+    // Grid mode: fixed-size dice in a column-major slot grid that grows downward.
+    // The canvas height tracks the dice count so an overflow:auto container scrolls.
+    const grid = !!opts.grid;
+    const gridCols = Math.max(0, opts.columns | 0);   // 0 = derive columns from width / slot
+    const gridSlot = Math.max(8, opts.slot || 96);    // target slot size (css px) when deriving
     let theme = buildTheme(opts.theme || 'gold');
     let sprites = null, curFS = 0;
     let dice = [], count = 0, cells = [], rolling = false, t0 = 0, ROLL_MAX = 0, onDone = null;
+    // Grid-mode windowing: the canvas is only the visible viewport; dice cells
+    // live in full content space and are culled/offset by the scroll position,
+    // so memory + per-frame work stay flat no matter how many dice there are.
+    let scrollTop = 0, contentH = 0, gridCell = 0;
 
-    // Lottery (spin-until-stop) timings, all derived from the existing tuned cfg
-    // so the look is unchanged — no new magic numbers:
-    //   cruise  — steady loop speed = the tuned spin rate (slots/ms)
-    //   RAMP_MS — spin-up ramp = the tuned spin-up fraction of a roll
-    //   LAND_MS — decel-to-result = the tuned roll duration (decel starts at
-    //             cruise because easeOut'(0)=3 and the land distance = cruise*LAND_MS/3)
+    // Spin-until-stop timings, matched to the pixel-dice-deluxe demo's feel:
+    //   cruise  — steady loop speed while waiting for the board dice (slots/ms)
+    //   RAMP_MS — quick spin-up after each die's staggered start
+    //   LAND_MS — the landing duration; the land curve mirrors the demo's
+    //             reelState (accelerate into a slam at `settle`, then bounce),
+    //             but starts velocity-continuous from `cruise` so there's no hitch.
     let mode = null, lastT = 0, running = false, rafId = 0;
     const cruise = cfg.rate;
-    const RAMP_MS = cfg.dur * cfg.settle;
+    const RAMP_MS = 350;
     const LAND_MS = cfg.dur;
-    const easeOut = t => 1 - Math.pow(1 - t, 3);
 
-    function chooseTier(cellW, cellH) {
-      const lim = Math.min(cellW, cellH) * 0.94; let best = TIERS[0];
+    // Pick a face size for a cell. Never exceed the cell, so dice never overlap
+    // at high counts — below the smallest tier we fall back to the raw cell size.
+    function chooseTier(cell) {
+      const lim = cell * 0.94; let best = TIERS[0];
       for (const T of TIERS) if (T <= lim) best = T;
-      return best;
+      return Math.min(best, Math.max(6, Math.floor(lim)));
     }
     function layout() {
       cells = [];
+      if (grid) {
+        // Fixed slot grid, filled row-major (top-left first, like the item grid).
+        // The canvas is just the viewport (BW×BH); cells are placed in full
+        // content space and `contentH` drives the scroll spacer in the DOM.
+        const cols = gridCols || Math.max(1, Math.round(canvas.width / gridSlot));
+        const cell = BW / cols;
+        const rows = Math.max(1, Math.ceil(Math.max(count, 1) / cols));
+        gridCell = cell;
+        contentH = Math.round(rows * cell * PIXEL);    // display px, for the scroll spacer
+        const FS = chooseTier(cell);
+        for (let i = 0; i < count; i++) {
+          const c = i % cols, r = Math.floor(i / cols);
+          cells.push({ cx: (c + 0.5) * cell, cy: (r + 0.5) * cell });   // content-space coords
+        }
+        if (FS !== curFS) { curFS = FS; sprites = getSprites(theme, FS); }
+        return;
+      }
       if (count <= 0) return;
-      const cellW = BW / count, cellH = BH;          // single row across the bar
-      const FS = chooseTier(cellW, cellH);
-      for (let i = 0; i < count; i++) cells.push({ cx: (i + 0.5) * cellW, cy: 0.5 * cellH });
+      // Adaptive grid: choose the row count that maximises cell size.
+      let rows = 1, bestCell = -1;
+      for (let r = 1; r <= count; r++) {
+        const cols = Math.ceil(count / r);
+        const cell = Math.min(BW / cols, BH / r);
+        if (cell > bestCell + 1e-3) { bestCell = cell; rows = r; }
+      }
+      const cols = Math.ceil(count / rows);
+      const cellW = BW / cols, cellH = BH / rows;
+      const FS = chooseTier(Math.min(cellW, cellH));
+      for (let i = 0; i < count; i++) {
+        const r = Math.floor(i / cols), c = i - r * cols;
+        const inRow = Math.min(cols, count - r * cols);
+        const off = (BW - inRow * cellW) / 2;          // centre the final (partial) row
+        cells.push({ cx: off + (c + 0.5) * cellW, cy: (r + 0.5) * cellH });
+      }
       if (FS !== curFS) { curFS = FS; sprites = getSprites(theme, FS); }
+    }
+    // Sync the pixel buffer + baked background to the current canvas size.
+    function syncBuffer() {
+      BW = Math.max(1, Math.round(canvas.width / PIXEL));
+      BH = Math.max(1, Math.round(canvas.height / PIXEL));
+      if (buf.width !== BW) buf.width = BW;
+      if (buf.height !== BH) buf.height = BH;
+      b = buf.getContext('2d'); b.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = false;
+      buildBg();
+    }
+    // Bake the static background for the current buffer size.
+    function buildBg() {
+      bgCanvas.width = BW; bgCanvas.height = BH;
+      const g = bgCtx; g.imageSmoothingEnabled = false;
+      g.fillStyle = '#1a2230'; g.fillRect(0, 0, BW, BH);
+      g.strokeStyle = 'rgba(255,255,255,0.035)'; g.lineWidth = 1;
+      const D = 13;
+      for (let c = -BH; c < BW + BH; c += D) {
+        g.beginPath(); g.moveTo(c, 0); g.lineTo(c + BH, BH); g.stroke();
+        g.beginPath(); g.moveTo(c, 0); g.lineTo(c - BH, BH); g.stroke();
+      }
+    }
+    // Match the canvas to a new on-screen (viewport) size, then re-lay out.
+    function resize(cssW, cssH) {
+      const w = Math.max(PIXEL, Math.round(cssW));
+      const h = Math.max(PIXEL, Math.round(cssH));
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      curFS = 0;                       // force a sprite/layout refresh at the new size
+      syncBuffer(); layout(); requestRedraw();
+    }
+    // Scroll the content window (grid mode); the canvas repaints the visible slice.
+    function setScroll(top) {
+      const s = Math.max(0, top | 0);
+      if (s === scrollTop) return;
+      scrollTop = s;
+      requestRedraw();
+    }
+    function makeDie() {
+      const r = 1 + Math.floor(Math.random() * 6), s = ORDER.indexOf(r);
+      return {
+        result: r, prev: r, pos: s, slot0: s, spinFaces: 0, start: 0, dur: cfg.dur, p: 0, _pp: s,
+        // lottery fields
+        lphase: 'idle', lt_spin: 0, lstopAt: 0, linit: false, lpos0: s, ltarget: s, lt0: 0, lbounce: 0, lsq: 1,
+      };
     }
     function setCount(n) {
       count = Math.max(0, n | 0);
-      dice = Array.from({ length: count }, () => {
-        const r = 1 + Math.floor(Math.random() * 6), s = ORDER.indexOf(r);
-        return {
-          result: r, prev: r, pos: s, slot0: s, spinFaces: 0, start: 0, dur: cfg.dur, p: 0, _pp: s,
-          // lottery fields
-          lphase: 'idle', lt_spin: 0, lstopAt: 0, linit: false, lpos0: s, ltarget: s, lt0: 0, lbounce: 0, lsq: 1,
-        };
-      });
+      // Keep existing dice (and their displayed faces) intact; only grow/shrink
+      // the tail so adding a die never re-randomizes the ones already showing.
+      if (count < dice.length) dice.length = count;
+      else while (dice.length < count) dice.push(makeDie());
       layout();
       requestRedraw();
     }
@@ -238,49 +343,62 @@
       ensureLoop();
     }
 
-    // --- Lottery spin: loop indefinitely, then land on stop() ---------------
-    // Begin (or continue) the reels looping. They keep spinning until stop().
-    function spin() {
+    // --- Spin-until-stop: staggered spin-up, loop, then staggered land -------
+    const stagger = () => Math.min(cfg.stagger, 1100 / Math.max(1, count));
+    // Begin the reels: each die spins up after its own staggered start, then
+    // loops at cruise until stop() lands it.
+    function spin(now = performance.now()) {
       if (count <= 0) return;
-      const now = performance.now();
-      for (const d of dice) {
-        if (d.lphase !== 'spin') d.lt_spin = now;   // (re)start the ramp from a standstill
+      const stag = stagger();
+      dice.forEach((d, i) => {
+        if (d.lphase !== 'spin') d.lt_spin = now + i * stag;   // staggered spin-up start
         d.lphase = 'spin'; d.linit = false; d.lbounce = 0; d.lsq = 1; d._pp = d.pos;
-      }
+      });
       mode = 'lottery'; rolling = true; lastT = now;
       ensureLoop();
     }
-    // Decelerate the (already spinning) reels onto `values`, staggered, then done().
-    function stop(values, done) {
+    // Land the (spinning) reels onto `values`, staggered, then done().
+    function stop(values, done, now = performance.now()) {
       if (mode !== 'lottery' || !rolling) { if (done) done(); return; }
       onDone = done || null;
-      const now = performance.now();
-      const stag = Math.min(cfg.stagger, 1100 / count);
+      const stag = stagger();
       dice.forEach((d, i) => {
         if (values && values[i] != null) d.result = values[i];
         d.lphase = 'land'; d.lstopAt = now + i * stag; d.linit = false;
       });
     }
-    // Advance one lottery die; writes d.pos / d.lbounce / d.lsq for drawAll.
+    // Advance one die; writes d.pos / d.lbounce / d.lsq for drawAll.
+    // The land mirrors the demo's reelState — accelerate into a slam at `settle`,
+    // then a pinned bounce — but its approach is velocity-continuous from the
+    // current spin speed, so the reel never visibly stutters when it stops.
     function updateLottery(d, now, dt) {
       if (d.lphase === 'spin' || (d.lphase === 'land' && now < d.lstopAt)) {
-        const v = cruise * smoothstep(0, RAMP_MS, now - d.lt_spin);   // ramp 0 -> cruise
+        const v = cruise * smoothstep(0, RAMP_MS, now - d.lt_spin);   // 0 -> cruise
         d.pos += v * dt; d.lbounce = 0; d.lsq = 1;
         return;
       }
       if (d.lphase === 'land') {
         if (!d.linit) {
-          d.linit = true; d.lpos0 = d.pos; d.lt0 = now;
+          d.linit = true; d.lt0 = now; d.lpos0 = d.pos; d.lv0 = cruise;   // carry spin speed in
           const resSlot = ORDER.indexOf(d.result);
-          const want = d.pos + cruise * LAND_MS / 3;                  // continuous decel from cruise
+          const want = d.pos + cruise * LAND_MS;                   // a generous slam distance
           d.ltarget = Math.round((want - resSlot) / 6) * 6 + resSlot;
-          if (d.ltarget <= d.pos) d.ltarget += 6;
+          while (d.ltarget <= d.pos + 6) d.ltarget += 6;           // forward, with real spins left
         }
-        const w = Math.min(1, (now - d.lt0) / LAND_MS);
-        d.pos = d.lpos0 + (d.ltarget - d.lpos0) * easeOut(w);
-        const osc = Math.sin(w * Math.PI * cfg.bounceCyc) * Math.pow(1 - w, 2);
-        d.lbounce = cfg.bounceAmp * osc; d.lsq = 1 + cfg.squash * osc;
-        if (w >= 1) { d.lphase = 'idle'; d.pos = d.ltarget; d.lbounce = 0; d.lsq = 1; }
+        const T = LAND_MS, Ts = cfg.settle * T, t = now - d.lt0;
+        if (t < Ts) {
+          // ease-in: velocity starts at lv0 (continuous with the spin) and
+          // accelerates so the reel hits the target at the slam point.
+          const tau = t / Ts, D = d.ltarget - d.lpos0, base = d.lv0 * Ts;
+          d.pos = d.lpos0 + base * tau + (D - base) * tau * tau;
+          d.lbounce = 0; d.lsq = 1;
+        } else {
+          const w = Math.min(1, (t - Ts) / (T - Ts));             // pinned + bounce
+          const osc = Math.sin(w * Math.PI * cfg.bounceCyc) * Math.pow(1 - w, 2);
+          d.pos = d.ltarget;
+          d.lbounce = cfg.bounceAmp * osc; d.lsq = 1 + cfg.squash * osc;
+          if (w >= 1) { d.lphase = 'idle'; d.lbounce = 0; d.lsq = 1; }
+        }
       }
     }
     function reelState(die, p) {
@@ -294,15 +412,7 @@
       const osc = Math.sin(w * Math.PI * cfg.bounceCyc) * Math.pow(1 - w, 2);
       return { pos: die.slot0 + die.spinFaces, bounce: cfg.bounceAmp * osc, sq: 1 + cfg.squash * osc };
     }
-    function drawBg() {
-      b.fillStyle = '#1a2230'; b.fillRect(0, 0, BW, BH);
-      b.strokeStyle = 'rgba(255,255,255,0.035)'; b.lineWidth = 1;
-      const D = 13;
-      for (let c = -BH; c < BW + BH; c += D) {
-        b.beginPath(); b.moveTo(c, 0); b.lineTo(c + BH, BH); b.stroke();
-        b.beginPath(); b.moveTo(c, 0); b.lineTo(c - BH, BH); b.stroke();
-      }
-    }
+    function drawBg() { b.drawImage(bgCanvas, 0, 0); }
     function drawReel(cell, die, st) {
       if (!sprites) return;
       const FS = curFS, STEP = FS, half = FS / 2;
@@ -331,13 +441,10 @@
       }
       if (squashing) b.restore();
 
-      const ea = (0.10 + 0.5 * blur).toFixed(3);
-      const og = b.createLinearGradient(0, y0, 0, y0 + FS);
-      og.addColorStop(0, 'rgba(6,4,8,' + ea + ')');
-      og.addColorStop(0.34, 'rgba(6,4,8,0)');
-      og.addColorStop(0.66, 'rgba(6,4,8,0)');
-      og.addColorStop(1, 'rgba(6,4,8,' + ea + ')');
-      b.fillStyle = og; b.fillRect(x0, y0, FS, FS);
+      // Edge vignette — baked once per size, blitted at the right opacity.
+      b.globalAlpha = 0.10 + 0.5 * blur;
+      b.drawImage(getVignette(FS), x0, y0);
+      b.globalAlpha = 1;
 
       if (blur > 0.35) {
         b.fillStyle = 'rgba(255,235,200,' + (0.05 * blur).toFixed(3) + ')';
@@ -348,15 +455,24 @@
       roundRect(b, x0 + 0.5, y0 + 0.5, FS - 1, FS - 1, rad);
       b.lineWidth = 1; b.strokeStyle = theme.accent; b.stroke();
     }
+    const _vcell = { cx: 0, cy: 0 };       // reused so culling allocates nothing
     function drawAll() {
       drawBg();
+      const sBuf = grid ? scrollTop / PIXEL : 0;
+      const halfCell = gridCell / 2;
       for (let i = 0; i < dice.length; i++) {
         const d = dice[i];
+        let cell = cells[i];
+        if (grid) {
+          const cy = cell.cy - sBuf;
+          if (cy + halfCell < 0 || cy - halfCell > BH) continue;   // off-screen → skip
+          _vcell.cx = cell.cx; _vcell.cy = cy; cell = _vcell;
+        }
         let st;
         if (mode === 'oneshot') st = reelState(d, d.p);
         else if (mode === 'lottery') st = { pos: d.pos, bounce: d.lbounce, sq: d.lsq };
         else st = { pos: d.pos, bounce: 0, sq: 1 };
-        drawReel(cells[i], d, st);
+        drawReel(cell, d, st);
       }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(buf, 0, 0, BW, BH, 0, 0, canvas.width, canvas.height);
@@ -396,7 +512,27 @@
       redrawId = requestAnimationFrame(() => { redrawId = 0; if (!running) drawAll(); });
     }
 
+    syncBuffer();
     setCount(opts.count || 0);
+
+    // Headless fairness sampler: runs the REAL staggered spin → land → settle on
+    // a fixed 60 fps virtual clock with no rendering and no RAF, then returns
+    // each die's settled top face. Shares spin/stop/updateLottery with the
+    // animated path, so sampled outcomes match what the bar actually shows.
+    function simulateResult(values) {
+      if (count <= 0) return [];
+      const STEP = 1000 / 60;
+      let now = 0;
+      spin(now);
+      stop(values || null, null, now);
+      let guard = 0;
+      while (rolling && guard++ < 200000) {
+        const prev = now; now += STEP;
+        for (const d of dice) updateLottery(d, now, now - prev);
+        if (dice.every(d => d.lphase === 'idle')) { rolling = false; mode = null; }
+      }
+      return dice.map(d => faceForSlot(Math.round(d.pos)));
+    }
 
     return {
       setCount,
@@ -404,10 +540,14 @@
       roll,
       spin,
       stop,
+      resize,
+      setScroll,
+      getContentHeight: () => contentH,
       isRolling: () => rolling,
+      simulateResult,
       setTheme: (k) => { theme = buildTheme(k); curFS = 0; layout(); requestRedraw(); },
     };
   }
 
-  window.PixelDiceDeluxe = PixelDiceDeluxe;
-})();
+  root.PixelDiceDeluxe = PixelDiceDeluxe;
+})(typeof window !== 'undefined' ? window : this);

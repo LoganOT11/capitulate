@@ -31,9 +31,6 @@ function setReadout(name, value) {
   if (el) el.textContent = String(value);
 }
 
-// Vertical gap between the board and the dice panel (matches CSS gap).
-const CENTER_GAP = 12;
-
 /**
  * Lay out the centre column: make the board a square that fits beside the side
  * panels, then size the dice-storage panel beneath it to the same width.
@@ -42,21 +39,18 @@ function fitLayout() {
   const col = document.getElementById('center-col');
   const stage = document.getElementById('board-stage');
   const board = document.getElementById('board');
-  const dicePanel = document.getElementById('dice-panel');
   if (!col || !stage || !board) return;
 
   board.style.width = W + 'px';
   board.style.height = H + 'px';
 
-  const diceH = dicePanel ? dicePanel.offsetHeight : 0;
-  const availW = col.clientWidth;
-  const availH = col.clientHeight - diceH - CENTER_GAP;
-  const size = Math.max(0, Math.min(availW, availH));
+  // The dice bar now lives in its own bottom grid row, so the centre column is
+  // dedicated to the board — fit the largest square into it.
+  const size = Math.max(0, Math.min(col.clientWidth, col.clientHeight));
 
   stage.style.width = size + 'px';
   stage.style.height = size + 'px';
   board.style.transform = `scale(${size / W})`;
-  if (dicePanel) dicePanel.style.width = size + 'px';
 }
 
 const CORNER_COLORS = {
@@ -116,10 +110,18 @@ class BoardScene extends Phaser.Scene {
       .addEventListener('click', () => this.toggleShopVisibility());
     document.getElementById('add-die-btn')
       .addEventListener('click', () => this.addBoughtDie());
+    // Repaint the dice slots' visible window as the panel scrolls.
+    const diceScroll = document.getElementById('dice-bar');
+    if (diceScroll) {
+      diceScroll.addEventListener('scroll', () => {
+        if (this.barRoller) this.barRoller.setScroll(diceScroll.scrollTop);
+      });
+    }
 
     // Size the board + dice panel to the viewport, and re-fit on resize.
     fitLayout();
-    window.addEventListener('resize', fitLayout);
+    this.resizeBar();
+    window.addEventListener('resize', () => { fitLayout(); this.resizeBar(); });
   }
 
   // --- Board rendering ----------------------------------------------------
@@ -167,6 +169,9 @@ class BoardScene extends Phaser.Scene {
         canvas: barCanvas,
         count: this.character.dicePool.bought.length,
         theme: 'gold',
+        pixel: 3,        // finer buffer than the board dice — keeps detail in the slots
+        grid: true,      // fixed-size dice in a scrollable column-major slot grid
+        columns: 2,      // two dice across, like the equipment grid
       });
     }
   }
@@ -490,19 +495,41 @@ class BoardScene extends Phaser.Scene {
     }
   }
 
-  /** Sync the dice bar (bought dice only) count + readout. */
+  /** Sync the dice slots (bought dice only) count + readout. */
   syncBarDice() {
     const n = this.character.dicePool.bought.length;
     if (this.barRoller) this.barRoller.setCount(n);
     const countEl = document.getElementById('dice-count');
     if (countEl) countEl.textContent = n ? `(${n})` : '';
+    this.updateDiceSpacer();
   }
 
-  /** Add a bought die to the bar (test button for the bar animation). */
+  /** Size the scroll spacer to the full dice content and re-sync the scroll pos. */
+  updateDiceSpacer() {
+    if (!this.barRoller) return;
+    const bar = document.getElementById('dice-bar');
+    const inner = document.getElementById('dice-inner');
+    if (!bar || !inner) return;
+    inner.style.height = Math.max(this.barRoller.getContentHeight(), bar.clientHeight) + 'px';
+    this.barRoller.setScroll(bar.scrollTop);
+  }
+
+  /** Add a bought die to the slots, then scroll the panel to reveal the newest. */
   addBoughtDie() {
     if (this.rolling) return;
     this.character.dicePool.addBought(new Die({ name: 'Bought', category: 'bought' }));
     this.syncBarDice();
+    const sc = document.getElementById('dice-bar');
+    if (sc) { sc.scrollTop = sc.scrollHeight; this.barRoller.setScroll(sc.scrollTop); }
+  }
+
+  /** Match the dice canvas to its viewport, then re-fit the scroll spacer. */
+  resizeBar() {
+    if (!this.barRoller) return;
+    const bar = document.getElementById('dice-bar');
+    if (!bar) return;
+    const w = bar.clientWidth, h = bar.clientHeight;
+    if (w > 0 && h > 0) { this.barRoller.resize(w, h); this.updateDiceSpacer(); }
   }
 
   // --- API ----------------------------------------------------------------

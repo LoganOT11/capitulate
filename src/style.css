@@ -15,14 +15,54 @@ body {
   overflow: hidden; /* everything fits on one page — no page scroll */
 }
 
-/* --- App shell: left char | centre board+dice | right equip+roll -------- */
+/* --- App shell -----------------------------------------------------------
+   The hero and dice columns run full-height from the top; a centred stat bar
+   sits above the board between them:
+     row 1:  [ hero ][ stat bar ][ dice + roll ]
+     row 2:  [ hero ][  board   ][ dice + roll ] */
 
 #app {
-  display: flex;
+  display: grid;
+  grid-template-columns: 250px 1fr 234px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "char topbar right"
+    "char center right";
   gap: 12px;
   height: 100vh;
   padding: 12px;
-  align-items: stretch;
+}
+
+/* --- Top: thin stat bar -------------------------------------------------- */
+
+#topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f5f5f5;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #222;
+}
+
+.stat-chip .lbl {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
 }
 
 .panel {
@@ -42,20 +82,13 @@ body {
   color: #555;
 }
 
-/* --- Left: character panel --------------------------------------------- */
+/* --- Left: hero panel (character + equipment) -------------------------- */
 
 #char-panel {
-  width: 250px;
-  flex: none;
+  grid-area: char;
   display: flex;
   flex-direction: column;
   overflow: auto;
-}
-
-#char-panel h1 {
-  margin: 0 0 14px;
-  font-size: 22px;
-  color: #2e7d32;
 }
 
 .char-header {
@@ -98,34 +131,11 @@ body {
   color: #666;
 }
 
-.stat-list {
-  margin: 0;
+/* Equipment lives inside the hero panel now (a 2-up slot grid). */
+#equip-panel {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.stat-list div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
-  background: #f5f5f5;
-  border-radius: 6px;
-}
-
-.stat-list dt {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #888;
-}
-
-.stat-list dd {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  min-height: 0;
 }
 
 .passive-flash {
@@ -135,14 +145,13 @@ body {
 /* --- Centre: board + dice storage beneath ------------------------------- */
 
 #center-col {
-  flex: 1 1 auto;
+  grid-area: center;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
 }
 
 /* board-stage is sized to the board's displayed square (set by main.js);
@@ -190,16 +199,17 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
 
-/* Horizontal dice-storage panel — width matched to the board by main.js */
-#dice-panel {
-  flex: none;
-  height: 132px;
+/* Dice slots — top of the right column, a scrollable grid of dice that mirrors
+   the equipment slot grid. The canvas grows downward as dice are added and the
+   panel (not the page) scrolls. */
+#dice-slots-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
-.dice-panel-head {
+.panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -207,7 +217,7 @@ body {
   margin-bottom: 8px;
 }
 
-.dice-panel-head .section-title {
+.panel-head .section-title {
   margin: 0;
 }
 
@@ -218,9 +228,11 @@ body {
 
 .btn-add-die {
   flex: none;
-  padding: 4px 12px;
-  font-size: 12px;
+  width: 30px;
+  height: 26px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1;
   color: #fff;
   background: #f9a825;
   border: none;
@@ -232,22 +244,27 @@ body {
   background: #f57f17;
 }
 
-/* Bought-dice bar — holds the deluxe slot-machine canvas */
+/* Bought-dice slots — vertical scroll container. The canvas is only the visible
+   viewport (sticky); #dice-inner is sized to the full content to drive scrolling. */
 .dice-bar {
   flex: 1 1 auto;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   background: #1a2230;
   border-radius: 8px;
-  overflow: hidden;
+}
+
+#dice-inner {
+  position: relative;         /* height set by JS to the full content height */
 }
 
 #dice-bar-canvas {
+  position: sticky;
+  top: 0;
   width: 100%;
-  height: 100%;
-  object-fit: contain;        /* letterbox — no pixel distortion */
+  height: auto;               /* = canvas.height (the viewport) */
   image-rendering: pixelated;
   display: block;
 }
@@ -255,18 +272,11 @@ body {
 /* --- Right: equipment (top) + roll area (bottom-right corner) ------------ */
 
 #right-col {
-  width: 200px;
-  flex: none;
+  grid-area: right;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-}
-
-#equip-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
 }
 
 .item-grid {

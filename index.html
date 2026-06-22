@@ -8,9 +8,20 @@
   </head>
   <body>
     <div id="app">
-      <!-- LEFT: character information -->
+      <!-- TOP: thin stat bar across the whole screen -->
+      <header id="topbar" class="panel">
+        <div class="stat-chip">
+          <span class="lbl">HP</span>
+          <span><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></span>
+        </div>
+        <div class="stat-chip"><span class="lbl">Damage</span> <span data-testid="char-damage">-</span></div>
+        <div class="stat-chip"><span class="lbl">Speed</span> <span data-testid="char-speed">-</span></div>
+        <div class="stat-chip"><span class="lbl">Loops</span> <span data-testid="char-loops">0</span></div>
+        <div class="stat-chip"><span class="lbl">Gold</span> <span data-testid="char-gold">0</span></div>
+      </header>
+
+      <!-- LEFT: hero panel — character + equipment -->
       <aside id="char-panel" class="panel">
-        <h1>Capitulate</h1>
         <div class="char-header">
           <span class="char-name" data-testid="char-name">-</span>
           <span class="char-type-badge" data-testid="char-type">-</span>
@@ -19,16 +30,13 @@
           <strong data-testid="char-passive">-</strong>
           <span class="ability-desc" id="ability-desc"></span>
         </div>
-        <dl class="stat-list">
-          <div><dt>HP</dt><dd><span data-testid="char-hp">-</span> / <span data-testid="char-max-hp">-</span></dd></div>
-          <div><dt>Damage</dt><dd data-testid="char-damage">-</dd></div>
-          <div><dt>Speed</dt><dd data-testid="char-speed">-</dd></div>
-          <div><dt>Loops</dt><dd data-testid="char-loops">0</dd></div>
-          <div><dt>Gold</dt><dd data-testid="char-gold">0</dd></div>
-        </dl>
+        <section id="equip-panel">
+          <h2 class="section-title">Equipment</h2>
+          <div id="item-grid" class="item-grid"></div>
+        </section>
       </aside>
 
-      <!-- CENTRE: board on top, dice storage beneath (matched to board width) -->
+      <!-- CENTRE: the board (the dice bar lives in the bottom strip below) -->
       <div id="center-col">
         <div id="board-stage">
           <div id="board"><div id="game"></div></div>
@@ -53,23 +61,21 @@
             </div>
           </div>
         </div>
-
-        <section id="dice-panel" class="panel">
-          <div class="dice-panel-head">
-            <h2 class="section-title">Dice <span class="dice-count" id="dice-count"></span></h2>
-            <button id="add-die-btn" class="btn-add-die" type="button">＋ Add Die</button>
-          </div>
-          <div id="dice-bar" class="dice-bar">
-            <canvas id="dice-bar-canvas" width="960" height="160" aria-hidden="true"></canvas>
-          </div>
-        </section>
       </div>
 
-      <!-- RIGHT: equipment (top) + dice animation & roll button (bottom corner) -->
+      <!-- RIGHT: dice slots (scrollable) on top + roll button at the bottom -->
       <div id="right-col">
-        <section id="equip-panel" class="panel">
-          <h2 class="section-title">Equipment</h2>
-          <div id="item-grid" class="item-grid"></div>
+        <section id="dice-slots-panel" class="panel">
+          <div class="panel-head">
+            <h2 class="section-title">Dice <span class="dice-count" id="dice-count"></span></h2>
+            <button id="add-die-btn" class="btn-add-die" type="button"
+                    title="Add Die" aria-label="Add Die">＋</button>
+          </div>
+          <div id="dice-bar" class="dice-bar">
+            <div id="dice-inner">
+              <canvas id="dice-bar-canvas" width="200" height="200" aria-hidden="true"></canvas>
+            </div>
+          </div>
         </section>
 
         <div id="roll-area">
